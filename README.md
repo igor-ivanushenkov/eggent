@@ -216,9 +216,9 @@ Main environment variables:
 | `PLAYWRIGHT_BROWSERS_PATH` | No | Browser install/cache path for Playwright (default: `/app/data/ms-playwright`) |
 | `NPM_CONFIG_CACHE` | No | npm cache directory for runtime installs (default: `/app/data/npm-cache`) |
 | `XDG_CACHE_HOME` | No | Generic CLI cache directory (default: `/app/data/.cache`) |
-| `CODEX_AUTH_FILE` | No | Explicit path to Codex OAuth file (default: `$HOME/.codex/auth.json`) |
-| `GEMINI_OAUTH_CREDS_FILE` | No | Explicit path to Gemini OAuth creds file (default: `$HOME/.gemini/oauth_creds.json`) |
-| `GEMINI_SETTINGS_FILE` | No | Explicit path to Gemini settings file (default: `$HOME/.gemini/settings.json`) |
+| `CODEX_AUTH_FILE` | No | Explicit path to Codex OAuth file (if unset, Eggent auto-discovers `.codex/auth.json` in common home dirs) |
+| `GEMINI_OAUTH_CREDS_FILE` | No | Explicit path to Gemini OAuth creds file (if unset, Eggent auto-discovers `.gemini/oauth_creds.json` in common home dirs) |
+| `GEMINI_SETTINGS_FILE` | No | Explicit path to Gemini settings file (if unset, Eggent auto-discovers `.gemini/settings.json` in common home dirs) |
 
 ## Data Persistence
 

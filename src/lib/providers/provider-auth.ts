@@ -83,11 +83,88 @@ function resolveAuthPath(envName: string, defaultPath: string): string {
   return trimmed ? trimmed : defaultPath;
 }
 
+function isReadableFile(filePath: string): boolean {
+  try {
+    return fs.statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function listChildDirs(baseDir: string): string[] {
+  try {
+    return fs
+      .readdirSync(baseDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => path.join(baseDir, entry.name));
+  } catch {
+    return [];
+  }
+}
+
+function collectHomeCandidates(): string[] {
+  const candidates = new Set<string>();
+
+  const addCandidate = (value: string | undefined | null) => {
+    if (!value) return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    candidates.add(trimmed);
+  };
+
+  addCandidate(os.homedir());
+  addCandidate(process.env.HOME);
+  addCandidate("/home/node");
+  addCandidate("/root");
+  addCandidate(path.join(process.cwd(), "data"));
+
+  for (const dir of listChildDirs("/home")) {
+    addCandidate(dir);
+  }
+  for (const dir of listChildDirs("/Users")) {
+    addCandidate(dir);
+  }
+
+  return Array.from(candidates);
+}
+
+function firstExistingFile(paths: string[]): string | null {
+  for (const filePath of paths) {
+    if (isReadableFile(filePath)) {
+      return filePath;
+    }
+  }
+  return null;
+}
+
+function discoverPath(defaultPath: string, relativePath: string): string {
+  if (isReadableFile(defaultPath)) {
+    return defaultPath;
+  }
+  const discovered =
+    firstExistingFile(
+      collectHomeCandidates().map((homeDir) => path.join(homeDir, relativePath))
+    ) || null;
+  return discovered || defaultPath;
+}
+
+function deriveGeminiSettingsPathFromCreds(credsPath: string): string | null {
+  const parsed = path.parse(credsPath);
+  if (parsed.base !== "oauth_creds.json") return null;
+  if (path.basename(parsed.dir) !== ".gemini") return null;
+  return path.join(parsed.dir, "settings.json");
+}
+
 function readCodexAuth(): { path: string; parsed: CodexAuthFile | null } {
-  const authPath = resolveAuthPath(
+  const defaultPath = path.join(os.homedir(), ".codex", "auth.json");
+  const configuredPath = resolveAuthPath(
     "CODEX_AUTH_FILE",
-    path.join(os.homedir(), ".codex", "auth.json")
+    defaultPath
   );
+  const authPath =
+    configuredPath === defaultPath
+      ? discoverPath(defaultPath, path.join(".codex", "auth.json"))
+      : configuredPath;
   const parsed = readJsonObject(authPath) as CodexAuthFile | null;
   return { path: authPath, parsed };
 }
@@ -173,25 +250,47 @@ function checkCodexOauthStatus(): ProviderAuthStatus {
 }
 
 function readGeminiSettings(): { path: string; parsed: Record<string, unknown> | null } {
+  const defaultPath = path.join(os.homedir(), ".gemini", "settings.json");
   const settingsPath = resolveAuthPath(
     "GEMINI_SETTINGS_FILE",
-    path.join(os.homedir(), ".gemini", "settings.json")
+    defaultPath
   );
-  return { path: settingsPath, parsed: readJsonObject(settingsPath) };
+  const resolvedSettingsPath =
+    settingsPath === defaultPath
+      ? discoverPath(defaultPath, path.join(".gemini", "settings.json"))
+      : settingsPath;
+  return { path: resolvedSettingsPath, parsed: readJsonObject(resolvedSettingsPath) };
 }
 
 function readGeminiOauthCreds(): { path: string; parsed: GeminiOauthCreds | null } {
+  const defaultPath = path.join(os.homedir(), ".gemini", "oauth_creds.json");
   const credsPath = resolveAuthPath(
     "GEMINI_OAUTH_CREDS_FILE",
-    path.join(os.homedir(), ".gemini", "oauth_creds.json")
+    defaultPath
   );
-  const parsed = readJsonObject(credsPath) as GeminiOauthCreds | null;
-  return { path: credsPath, parsed };
+  const resolvedCredsPath =
+    credsPath === defaultPath
+      ? discoverPath(defaultPath, path.join(".gemini", "oauth_creds.json"))
+      : credsPath;
+  const parsed = readJsonObject(resolvedCredsPath) as GeminiOauthCreds | null;
+  return { path: resolvedCredsPath, parsed };
 }
 
 function resolveGeminiCredential(): ResolvedCliOAuthCredential {
-  const { parsed: creds } = readGeminiOauthCreds();
-  const { path: settingsPath, parsed: settings } = readGeminiSettings();
+  const { path: credsPath, parsed: creds } = readGeminiOauthCreds();
+  const settingsFromCreds = deriveGeminiSettingsPathFromCreds(credsPath);
+  const settingsConfigured = process.env.GEMINI_SETTINGS_FILE?.trim();
+  const { path: discoveredSettingsPath, parsed: discoveredSettings } = readGeminiSettings();
+  const settingsPath =
+    !settingsConfigured &&
+    settingsFromCreds &&
+    isReadableFile(settingsFromCreds)
+      ? settingsFromCreds
+      : discoveredSettingsPath;
+  const settings =
+    settingsPath === discoveredSettingsPath
+      ? discoveredSettings
+      : readJsonObject(settingsPath);
   if (!creds) {
     throw new Error("Gemini OAuth file is missing. Run `gemini` and login with Google.");
   }
@@ -238,7 +337,19 @@ function resolveGeminiCredential(): ResolvedCliOAuthCredential {
 
 function checkGeminiOauthStatus(): ProviderAuthStatus {
   const { path: credsPath, parsed: creds } = readGeminiOauthCreds();
-  const { path: settingsPath, parsed: settings } = readGeminiSettings();
+  const settingsFromCreds = deriveGeminiSettingsPathFromCreds(credsPath);
+  const settingsConfigured = process.env.GEMINI_SETTINGS_FILE?.trim();
+  const { path: discoveredSettingsPath, parsed: discoveredSettings } = readGeminiSettings();
+  const settingsPath =
+    !settingsConfigured &&
+    settingsFromCreds &&
+    isReadableFile(settingsFromCreds)
+      ? settingsFromCreds
+      : discoveredSettingsPath;
+  const settings =
+    settingsPath === discoveredSettingsPath
+      ? discoveredSettings
+      : readJsonObject(settingsPath);
 
   if (!creds) {
     return {
