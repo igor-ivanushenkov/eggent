@@ -216,6 +216,9 @@ Main environment variables:
 | `PLAYWRIGHT_BROWSERS_PATH` | No | Browser install/cache path for Playwright (default: `/app/data/ms-playwright`) |
 | `NPM_CONFIG_CACHE` | No | npm cache directory for runtime installs (default: `/app/data/npm-cache`) |
 | `XDG_CACHE_HOME` | No | Generic CLI cache directory (default: `/app/data/.cache`) |
+| `CODEX_AUTH_FILE` | No | Explicit path to Codex OAuth file (default: `$HOME/.codex/auth.json`) |
+| `GEMINI_OAUTH_CREDS_FILE` | No | Explicit path to Gemini OAuth creds file (default: `$HOME/.gemini/oauth_creds.json`) |
+| `GEMINI_SETTINGS_FILE` | No | Explicit path to Gemini settings file (default: `$HOME/.gemini/settings.json`) |
 
 ## Data Persistence
 
@@ -258,13 +261,17 @@ Use one host consistently. Browser storage/cookies are origin-scoped.
 2. Docker container does not become healthy  
 Run `docker compose logs --tail 200 app` and verify `.env` values.
 
-3. Linux Docker permissions issues  
+3. Codex/Gemini OAuth says "token file was not found" on VPS  
+Eggent reads OAuth files from the runtime user home (for Docker default user this is `/home/node`).
+Run CLI login as that same user (`docker compose exec -u node app codex login`, `docker compose exec -u node app gemini`) or set `CODEX_AUTH_FILE` / `GEMINI_OAUTH_CREDS_FILE` / `GEMINI_SETTINGS_FILE` in `.env`.
+
+4. Linux Docker permissions issues  
 Try with `sudo docker ...` or add your user to the `docker` group.
 
-4. Build fails after dependency changes  
+5. Build fails after dependency changes  
 Run `npm install` and retry `npm run build`.
 
-5. Large downloads fail with `No space left on device` despite free server disk  
+6. Large downloads fail with `No space left on device` despite free server disk  
 This usually means temp/cache paths are constrained in the runtime environment. Rebuild and restart with current compose defaults, then verify inside container:
 ```bash
 docker compose build --no-cache app
@@ -272,7 +279,7 @@ docker compose up -d app
 docker compose exec app sh -lc 'df -h /tmp /app/data && echo "TMPDIR=$TMPDIR" && echo "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH"'
 ```
 
-6. `Process error: spawn python3 ENOENT` in Code Execution  
+7. `Process error: spawn python3 ENOENT` in Code Execution  
 `python3` is missing in runtime environment.
 
 For Docker deploys:
@@ -288,7 +295,7 @@ sudo apt-get update && sudo apt-get install -y python3
 python3 --version
 ```
 
-7. `sh: 1: curl: not found` in Code Execution (terminal runtime)  
+8. `sh: 1: curl: not found` in Code Execution (terminal runtime)  
 `curl` is missing in runtime environment.
 
 For Docker deploys:
@@ -304,13 +311,13 @@ sudo apt-get update && sudo apt-get install -y curl
 curl --version
 ```
 
-8. `command not found` for common terminal/skill commands (`git`, `jq`, `rg`)  
+9. `command not found` for common terminal/skill commands (`git`, `jq`, `rg`)  
 Install recommended CLI utilities:
 ```bash
 sudo apt-get update && sudo apt-get install -y git jq ripgrep
 ```
 
-9. `ModuleNotFoundError: No module named 'requests'` in Python Code Execution  
+10. `ModuleNotFoundError: No module named 'requests'` in Python Code Execution  
 `requests` is missing in runtime environment.
 
 For Docker deploys:
@@ -326,7 +333,7 @@ sudo apt-get update && sudo apt-get install -y python3-requests
 python3 -c "import requests; print(requests.__version__)"
 ```
 
-10. `/usr/bin/python3: No module named pip` when trying to install Python packages  
+11. `/usr/bin/python3: No module named pip` when trying to install Python packages  
 `pip` is missing in runtime environment.
 
 For Docker deploys:
@@ -342,7 +349,7 @@ sudo apt-get update && sudo apt-get install -y python3-pip
 python3 -m pip --version
 ```
 
-11. `apt-get install ...` fails in Code Execution with `Permission denied`  
+12. `apt-get install ...` fails in Code Execution with `Permission denied`  
 Use sudo in terminal runtime:
 ```bash
 sudo apt-get update && sudo apt-get install -y ffmpeg

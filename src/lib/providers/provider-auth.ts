@@ -74,8 +74,20 @@ function readJsonObject(filePath: string): Record<string, unknown> | null {
   }
 }
 
+function resolveAuthPath(envName: string, defaultPath: string): string {
+  const envValue = process.env[envName];
+  if (typeof envValue !== "string") {
+    return defaultPath;
+  }
+  const trimmed = envValue.trim();
+  return trimmed ? trimmed : defaultPath;
+}
+
 function readCodexAuth(): { path: string; parsed: CodexAuthFile | null } {
-  const authPath = path.join(os.homedir(), ".codex", "auth.json");
+  const authPath = resolveAuthPath(
+    "CODEX_AUTH_FILE",
+    path.join(os.homedir(), ".codex", "auth.json")
+  );
   const parsed = readJsonObject(authPath) as CodexAuthFile | null;
   return { path: authPath, parsed };
 }
@@ -133,7 +145,7 @@ function checkCodexOauthStatus(): ProviderAuthStatus {
       message: "Codex CLI is not in OAuth mode.",
       detail: authMode
         ? `auth_mode=${authMode}. Run \`codex login\` with ChatGPT.`
-        : "auth_mode is missing in ~/.codex/auth.json",
+        : `auth_mode is missing in ${authPath}`,
     };
   }
 
@@ -160,20 +172,26 @@ function checkCodexOauthStatus(): ProviderAuthStatus {
   };
 }
 
-function readGeminiSettings(): Record<string, unknown> | null {
-  const settingsPath = path.join(os.homedir(), ".gemini", "settings.json");
-  return readJsonObject(settingsPath);
+function readGeminiSettings(): { path: string; parsed: Record<string, unknown> | null } {
+  const settingsPath = resolveAuthPath(
+    "GEMINI_SETTINGS_FILE",
+    path.join(os.homedir(), ".gemini", "settings.json")
+  );
+  return { path: settingsPath, parsed: readJsonObject(settingsPath) };
 }
 
 function readGeminiOauthCreds(): { path: string; parsed: GeminiOauthCreds | null } {
-  const credsPath = path.join(os.homedir(), ".gemini", "oauth_creds.json");
+  const credsPath = resolveAuthPath(
+    "GEMINI_OAUTH_CREDS_FILE",
+    path.join(os.homedir(), ".gemini", "oauth_creds.json")
+  );
   const parsed = readJsonObject(credsPath) as GeminiOauthCreds | null;
   return { path: credsPath, parsed };
 }
 
 function resolveGeminiCredential(): ResolvedCliOAuthCredential {
   const { parsed: creds } = readGeminiOauthCreds();
-  const settings = readGeminiSettings();
+  const { path: settingsPath, parsed: settings } = readGeminiSettings();
   if (!creds) {
     throw new Error("Gemini OAuth file is missing. Run `gemini` and login with Google.");
   }
@@ -192,7 +210,9 @@ function resolveGeminiCredential(): ResolvedCliOAuthCredential {
     selectedTypeValue.startsWith("oauth");
 
   if (!selectedOauth) {
-    throw new Error("Gemini CLI is not in OAuth mode. Switch auth to OAuth in Gemini CLI.");
+    throw new Error(
+      `Gemini CLI is not in OAuth mode. Switch auth to OAuth in Gemini CLI (settings: ${settingsPath}).`
+    );
   }
 
   const accessToken = asNonEmptyString(creds.access_token);
@@ -218,7 +238,7 @@ function resolveGeminiCredential(): ResolvedCliOAuthCredential {
 
 function checkGeminiOauthStatus(): ProviderAuthStatus {
   const { path: credsPath, parsed: creds } = readGeminiOauthCreds();
-  const settings = readGeminiSettings();
+  const { path: settingsPath, parsed: settings } = readGeminiSettings();
 
   if (!creds) {
     return {
@@ -256,7 +276,7 @@ function checkGeminiOauthStatus(): ProviderAuthStatus {
       message: "Gemini CLI is not in OAuth mode.",
       detail: selectedTypeValue
         ? `selectedType=${selectedTypeValue}; switch to OAuth in Gemini CLI`
-        : "selectedType is missing in ~/.gemini/settings.json",
+        : `selectedType is missing in ${settingsPath}`,
     };
   }
 
