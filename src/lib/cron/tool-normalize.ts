@@ -190,12 +190,40 @@ function normalizeScheduleFromRecord(input: UnknownRecord): CronSchedule | null 
     : input;
 
   const rawKind = readString(scheduleRaw.kind)?.toLowerCase();
+  const scheduleKindHint = readString(scheduleRaw.scheduleKind)?.toLowerCase();
+  const explicitEveryKind = rawKind === "every" || scheduleKindHint === "every";
   const at =
     readString(scheduleRaw.at) ??
     readString(scheduleRaw.scheduleAt) ??
     readString(scheduleRaw.runAt) ??
     readString(scheduleRaw.when);
-  const everyMs = readNumber(scheduleRaw.everyMs);
+  const everyMsDirect =
+    readNumber(scheduleRaw.everyMs) ??
+    readNumber(scheduleRaw.intervalMs) ??
+    readNumber(scheduleRaw.repeatMs);
+  const everySeconds =
+    readNumber(scheduleRaw.everySeconds) ??
+    readNumber(scheduleRaw.intervalSeconds) ??
+    readNumber(scheduleRaw.repeatSeconds) ??
+    (explicitEveryKind ? readNumber(scheduleRaw.seconds) : undefined);
+  const everyMinutes =
+    readNumber(scheduleRaw.everyMinutes) ??
+    readNumber(scheduleRaw.intervalMinutes) ??
+    readNumber(scheduleRaw.repeatMinutes);
+  const everyHours =
+    readNumber(scheduleRaw.everyHours) ??
+    readNumber(scheduleRaw.intervalHours) ??
+    readNumber(scheduleRaw.repeatHours);
+  const everyMs =
+    typeof everyMsDirect === "number" && everyMsDirect > 0
+      ? everyMsDirect
+      : typeof everySeconds === "number" && everySeconds > 0
+        ? everySeconds * 1_000
+        : typeof everyMinutes === "number" && everyMinutes > 0
+          ? everyMinutes * 60_000
+          : typeof everyHours === "number" && everyHours > 0
+            ? everyHours * 3_600_000
+            : undefined;
   const anchorMs = readNumber(scheduleRaw.anchorMs);
   const expr = readString(scheduleRaw.expr) ?? readString(scheduleRaw.cronExpr);
   const tz = readString(scheduleRaw.tz) ?? readString(scheduleRaw.cronTz);
@@ -209,7 +237,7 @@ function normalizeScheduleFromRecord(input: UnknownRecord): CronSchedule | null 
           ? "every"
           : expr
             ? "cron"
-            : readString(scheduleRaw.scheduleKind)?.toLowerCase();
+            : scheduleKindHint;
 
   if (kind === "at" && at) {
     return { kind: "at", at };
@@ -244,6 +272,16 @@ function normalizeScheduleFromRecord(input: UnknownRecord): CronSchedule | null 
       : typeof delaySeconds === "number" && delaySeconds > 0
         ? delaySeconds * 1_000
         : 0;
+  if (kind === "every" && totalMs > 0) {
+    return {
+      kind: "every",
+      everyMs: Math.max(1, Math.floor(totalMs)),
+      anchorMs:
+        typeof anchorMs === "number" && Number.isFinite(anchorMs)
+          ? Math.max(0, Math.floor(anchorMs))
+          : undefined,
+    };
+  }
   if (totalMs > 0) {
     return { kind: "at", at: new Date(Date.now() + totalMs).toISOString() };
   }
@@ -322,6 +360,9 @@ function explainAddInputFailure(source: UnknownRecord): string {
 
   problems.push(
     "Example: {\"action\":\"add\",\"delaySeconds\":30,\"message\":\"Отправь пользователю: привет\"}"
+  );
+  problems.push(
+    "Recurring example: {\"action\":\"add\",\"schedule\":{\"kind\":\"every\",\"everyMs\":30000},\"payload\":{\"kind\":\"agentTurn\",\"message\":\"Отправь пользователю: привет\"}}"
   );
   return problems.join(" ");
 }
