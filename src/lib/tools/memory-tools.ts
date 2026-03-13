@@ -8,11 +8,14 @@ export async function memorySave(
   text: string,
   area: string,
   memorySubdir: string,
-  settings: AppSettings
+  settings: AppSettings,
+  filePath?: string,
+  mimeType?: string
 ): Promise<string> {
   try {
-    const id = await insertMemory(text, area, memorySubdir, settings);
-    return `Memory saved successfully (ID: ${id}, area: ${area})`;
+    const file = filePath && mimeType ? { path: filePath, mimeType } : undefined;
+    const id = await insertMemory(text, area, memorySubdir, settings, {}, file);
+    return `Memory saved successfully (ID: ${id}, area: ${area}${file ? `, file: ${filePath}` : ""})`;
   } catch (error) {
     return `Failed to save memory: ${error instanceof Error ? error.message : String(error)}`;
   }

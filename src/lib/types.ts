@@ -33,6 +33,7 @@ export interface AppSettings {
     apiKey?: string;
     baseUrl?: string;
     dimensions?: number;
+    taskType?: "RETRIEVAL_QUERY" | "RETRIEVAL_DOCUMENT" | "SEMANTIC_SIMILARITY" | "CLASSIFICATION" | "CLUSTERING" | "QUESTION_ANSWERING" | "FACT_VERIFICATION" | "CODE_RETRIEVAL_QUERY";
   };
   codeExecution: {
     enabled: boolean;
@@ -166,6 +167,10 @@ export enum MemoryArea {
 export interface MemoryEntry {
   id: string;
   text: string;
+  file?: {
+    path: string;
+    mimeType: string;
+  };
   area: MemoryArea;
   metadata: Record<string, unknown>;
   score?: number;
@@ -175,6 +180,10 @@ export interface MemoryEntry {
 export interface VectorDocument {
   id: string;
   text: string;
+  file?: {
+    path: string;
+    mimeType: string;
+  };
   embedding: number[];
   metadata: Record<string, unknown>;
 }

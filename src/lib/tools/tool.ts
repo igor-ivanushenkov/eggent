@@ -1212,9 +1212,17 @@ export function createAgentTools(
           .describe(
             "Memory area: 'main' for general facts, 'fragments' for conversation snippets, 'solutions' for successful solutions, 'instruments' for tool descriptions"
           ),
+        file_path: z
+          .string()
+          .optional()
+          .describe("Optional absolute path to a file (image, audio, PDF) to embed along with the text."),
+        mime_type: z
+          .string()
+          .optional()
+          .describe("Optional MIME type of the file (required if file_path is provided)."),
       }),
-      execute: async ({ text, area }) => {
-        return memorySave(text, area, context.memorySubdir, settings);
+      execute: async ({ text, area, file_path, mime_type }) => {
+        return memorySave(text, area, context.memorySubdir, settings, file_path, mime_type);
       },
     });
 

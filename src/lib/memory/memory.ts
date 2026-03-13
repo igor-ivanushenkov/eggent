@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import { embedTexts } from "@/lib/memory/embeddings";
+import { embedTexts, embedContent } from "@/lib/memory/embeddings";
 import type { VectorDocument, AppSettings } from "@/lib/types";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -83,18 +83,22 @@ function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 /**
- * Insert text into the vector database
+ * Insert text and/or file into the vector database
  */
 export async function insertMemory(
   text: string,
   area: string,
   subdir: string,
   settings: AppSettings,
-  additionalMetadata: Record<string, unknown> = {}
+  additionalMetadata: Record<string, unknown> = {},
+  file?: { path: string; mimeType: string }
 ): Promise<string> {
   const db = await loadDB(subdir);
 
-  const embeddings = await embedTexts([text], settings.embeddingsModel);
+  const contentToEmbed = { text, file };
+  
+  // Use embedContent for multimodal capabilities
+  const embeddings = await embedContent([contentToEmbed], settings.embeddingsModel);
   if (!embeddings || embeddings.length === 0) {
     throw new Error("Failed to generate embedding");
   }
@@ -103,6 +107,7 @@ export async function insertMemory(
   const doc: VectorDocument = {
     id,
     text,
+    file,
     embedding: embeddings[0],
     metadata: {
       area,
@@ -126,7 +131,7 @@ export async function searchMemory(
   subdir: string,
   settings: AppSettings,
   areaFilter?: string
-): Promise<{ id: string; text: string; score: number; metadata: Record<string, unknown> }[]> {
+): Promise<{ id: string; text: string; file?: { path: string, mimeType: string }; score: number; metadata: Record<string, unknown> }[]> {
   const db = await loadDB(subdir);
   if (db.documents.length === 0) return [];
 
@@ -140,6 +145,7 @@ export async function searchMemory(
     .map((doc) => ({
       id: doc.id,
       text: doc.text,
+      file: doc.file,
       score: cosineSimilarity(queryEmbedding, doc.embedding),
       metadata: doc.metadata,
     }))

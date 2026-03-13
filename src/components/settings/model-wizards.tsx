@@ -644,6 +644,7 @@ export function EmbeddingsModelWizard({
   );
 
   const knownDimensions: Record<string, number> = {
+    "gemini-embedding-2-preview": 3072,
     "text-embedding-3-small": 1536,
     "text-embedding-3-large": 3072,
     "text-embedding-ada-002": 1536,
@@ -817,6 +818,32 @@ export function EmbeddingsModelWizard({
           Dimensions are auto-detected for known models. Adjust if necessary.
         </p>
       </div>
+
+      {provider === "google" && hasApiKey && (
+        <div className="space-y-2 transition-all duration-300">
+          <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Task Type (Gemini Only)
+          </Label>
+          <select
+            value={settings.embeddingsModel.taskType || "RETRIEVAL_DOCUMENT"}
+            onChange={(event) =>
+              updateSettings("embeddingsModel.taskType", event.target.value)
+            }
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+          >
+            <option value="RETRIEVAL_DOCUMENT">Retrieval Document (For Saving Knowledge)</option>
+            <option value="RETRIEVAL_QUERY">Retrieval Query (For Searching Knowledge)</option>
+            <option value="SEMANTIC_SIMILARITY">Semantic Similarity</option>
+            <option value="CLASSIFICATION">Classification</option>
+            <option value="CLUSTERING">Clustering</option>
+            <option value="QUESTION_ANSWERING">Question Answering</option>
+            <option value="FACT_VERIFICATION">Fact Verification</option>
+          </select>
+          <p className="text-[10px] text-muted-foreground">
+            Sets the intended use of the embeddings. RETRIEVAL_DOCUMENT is recommended for memory storage.
+          </p>
+        </div>
+      )}
     </section>
   );
 }
