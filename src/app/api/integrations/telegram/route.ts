@@ -32,17 +32,9 @@ import { getAllProjects } from "@/lib/storage/project-store";
 const TELEGRAM_TEXT_LIMIT = 4096;
 const TELEGRAM_FILE_MAX_BYTES = 30 * 1024 * 1024;
 
-interface TelegramCallbackQuery {
-  id: string;
-  from: { id: unknown };
-  message: { chat: { id: unknown }; message_id: unknown };
-  data?: string;
-}
-
 interface TelegramUpdate {
   update_id?: unknown;
   message?: TelegramMessage;
-  callback_query?: TelegramCallbackQuery;
 }
 
 interface TelegramMessage {
@@ -460,10 +452,15 @@ async function sendTelegramMessage(
   }
 }
 
-async function answerCallbackQuery(botToken: string, callbackQueryId: string): Promise<void> {
-  await callTelegramApi(botToken, "answerCallbackQuery", {
-    callback_query_id: callbackQueryId,
-  });
+function buildProjectsKeyboard(
+  projects: Array<{ id: string; name: string }>,
+  activeProjectId?: string
+): Record<string, unknown> {
+  const rows = projects.map((p) => [
+    { text: activeProjectId === p.id ? `✓ ${p.name}` : p.name },
+  ]);
+  rows.push([{ text: "🆕 Новый чат" }]);
+  return { keyboard: rows, resize_keyboard: true, is_persistent: true };
 }
 
 function helpText(activeProject?: { id?: string; name?: string }): string {
@@ -538,61 +535,6 @@ export async function POST(req: NextRequest) {
     const isNewUpdate = await claimTelegramUpdate(botId, updateId);
     if (!isNewUpdate) {
       return Response.json({ ok: true, duplicate: true });
-    }
-
-    const callbackQuery = body.callback_query;
-    if (callbackQuery) {
-      const cbFromUserId = normalizeTelegramUserId(callbackQuery.from?.id);
-      if (!cbFromUserId || !allowedUserIds.has(cbFromUserId)) {
-        await answerCallbackQuery(botToken, callbackQuery.id);
-        return Response.json({ ok: true, ignored: true, reason: "user_not_allowed" });
-      }
-
-      const cbChatId =
-        typeof callbackQuery.message.chat.id === "number" ||
-        typeof callbackQuery.message.chat.id === "string"
-          ? callbackQuery.message.chat.id
-          : null;
-      if (cbChatId === null) {
-        await answerCallbackQuery(botToken, callbackQuery.id);
-        return Response.json({ ok: true, ignored: true, reason: "missing_chat_id" });
-      }
-
-      let cbSessionId = await getTelegramChatSessionId(botId, cbChatId);
-      if (!cbSessionId) {
-        cbSessionId = createDefaultTelegramSessionId(botId, cbChatId);
-        await setTelegramChatSessionId(botId, cbChatId, cbSessionId);
-      }
-
-      const cbData = callbackQuery.data ?? "";
-
-      if (cbData === "new_chat") {
-        const freshSessionId = createFreshTelegramSessionId(botId, cbChatId);
-        await setTelegramChatSessionId(botId, cbChatId, freshSessionId);
-        await answerCallbackQuery(botToken, callbackQuery.id);
-        await sendTelegramMessage(botToken, cbChatId, "Начал новый диалог.");
-        return Response.json({ ok: true });
-      }
-
-      if (cbData.startsWith("switch_project:")) {
-        const projectId = cbData.slice("switch_project:".length);
-        const allProjects = await getAllProjects();
-        const project = allProjects.find((p) => p.id === projectId);
-        if (!project) {
-          await answerCallbackQuery(botToken, callbackQuery.id);
-          await sendTelegramMessage(botToken, cbChatId, "Проект не найден.");
-          return Response.json({ ok: true });
-        }
-        const cbSession = await getOrCreateExternalSession(cbSessionId);
-        cbSession.activeProjectId = projectId;
-        await saveExternalSession(cbSession);
-        await answerCallbackQuery(botToken, callbackQuery.id);
-        await sendTelegramMessage(botToken, cbChatId, `Проект переключён: ${project.name}`);
-        return Response.json({ ok: true });
-      }
-
-      await answerCallbackQuery(botToken, callbackQuery.id);
-      return Response.json({ ok: true });
     }
 
     const message = body.message;
@@ -683,6 +625,8 @@ export async function POST(req: NextRequest) {
         ...resolvedProject.session,
         updatedAt: new Date().toISOString(),
       });
+      const allProjects = await getAllProjects();
+      const keyboard = buildProjectsKeyboard(allProjects, resolvedProject.resolvedProjectId);
       await sendTelegramMessage(
         botToken,
         chatId,
@@ -690,7 +634,8 @@ export async function POST(req: NextRequest) {
           id: resolvedProject.resolvedProjectId,
           name: resolvedProject.projectName,
         }),
-        messageId
+        messageId,
+        keyboard
       );
       return Response.json({ ok: true, command });
     }
@@ -698,11 +643,15 @@ export async function POST(req: NextRequest) {
     if (command === "/new") {
       const freshSessionId = createFreshTelegramSessionId(botId, chatId);
       await setTelegramChatSessionId(botId, chatId, freshSessionId);
+      const allProjects = await getAllProjects();
+      const { resolvedProjectId } = await resolveTelegramProjectContext({ sessionId: freshSessionId, defaultProjectId });
+      const keyboard = buildProjectsKeyboard(allProjects, resolvedProjectId);
       await sendTelegramMessage(
         botToken,
         chatId,
         "Начал новый диалог. Контекст очищен для следующего сообщения.",
-        messageId
+        messageId,
+        keyboard
       );
       return Response.json({ ok: true, command });
     }
@@ -713,28 +662,38 @@ export async function POST(req: NextRequest) {
         defaultProjectId,
       });
       const allProjects = await getAllProjects();
-      if (allProjects.length === 0) {
-        await sendTelegramMessage(botToken, chatId, "Проекты не найдены.", messageId);
-        return Response.json({ ok: true, command });
-      }
-      const projectRows = allProjects.map((p) => [
-        {
-          text: resolvedProjectId === p.id ? `✓ ${p.name}` : p.name,
-          callback_data: `switch_project:${p.id}`,
-        },
-      ]);
-      const inlineKeyboard = [
-        ...projectRows,
-        [{ text: "🆕 Новый чат", callback_data: "new_chat" }],
-      ];
+      const keyboard = buildProjectsKeyboard(allProjects, resolvedProjectId);
       await sendTelegramMessage(
         botToken,
         chatId,
         "Выберите проект:",
         messageId,
-        { inline_keyboard: inlineKeyboard }
+        keyboard
       );
       return Response.json({ ok: true, command });
+    }
+
+    // Handle keyboard button taps (sent as plain text)
+    if (incomingText === "🆕 Новый чат") {
+      const freshSessionId = createFreshTelegramSessionId(botId, chatId);
+      await setTelegramChatSessionId(botId, chatId, freshSessionId);
+      const allProjects = await getAllProjects();
+      const { resolvedProjectId } = await resolveTelegramProjectContext({ sessionId: freshSessionId, defaultProjectId });
+      const keyboard = buildProjectsKeyboard(allProjects, resolvedProjectId);
+      await sendTelegramMessage(botToken, chatId, "Начал новый диалог.", messageId, keyboard);
+      return Response.json({ ok: true });
+    }
+
+    const normalizedText = incomingText.startsWith("✓ ") ? incomingText.slice(2) : incomingText;
+    const allProjectsList = await getAllProjects();
+    const matchedProject = allProjectsList.find((p) => p.name === normalizedText);
+    if (matchedProject) {
+      const session = await getOrCreateExternalSession(sessionId);
+      session.activeProjectId = matchedProject.id;
+      await saveExternalSession(session);
+      const keyboard = buildProjectsKeyboard(allProjectsList, matchedProject.id);
+      await sendTelegramMessage(botToken, chatId, `Проект: ${matchedProject.name}`, messageId, keyboard);
+      return Response.json({ ok: true });
     }
 
     let incomingSavedFile:
