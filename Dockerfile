@@ -3,7 +3,8 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY package.json package-lock.json ./
-RUN npm install --no-package-lock
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 FROM deps AS builder
 WORKDIR /app
@@ -26,7 +27,9 @@ ENV XDG_CACHE_HOME=/app/data/.cache
 
 RUN mkdir -p "${TMPDIR}" "${PLAYWRIGHT_BROWSERS_PATH}" "${npm_config_cache}" "${XDG_CACHE_HOME}"
 
-RUN apt-get update \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update \
   && apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
@@ -62,7 +65,8 @@ RUN echo "node ALL=(root) NOPASSWD: ALL" > /etc/sudoers.d/eggent-node \
   && chmod 440 /etc/sudoers.d/eggent-node
 
 COPY package.json package-lock.json ./
-RUN npm install --omit=dev --no-package-lock
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --omit=dev
 
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/next.config.mjs ./next.config.mjs
