@@ -2,10 +2,7 @@ name: eggent
 
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: eggent:local
+    image: ${EGGENT_IMAGE:-ghcr.io/igor-ivanushenkov/eggent:latest}
     restart: unless-stopped
     init: true
     env_file:
