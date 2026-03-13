@@ -4,6 +4,7 @@ import {
   stepCountIs,
   hasToolCall,
   type ModelMessage,
+  type SystemModelMessage,
   type ToolExecutionOptions,
   type ToolSet,
 } from "ai";
@@ -19,10 +20,37 @@ import type { ChatMessage } from "@/lib/types";
 import { publishUiSyncEvent } from "@/lib/realtime/event-bus";
 
 const LLM_LOG_BORDER = "═".repeat(60);
-const MAX_TOOL_STEPS_PER_TURN = 30;
-const MAX_TOOL_STEPS_SUBORDINATE = 15;
+const MAX_TOOL_STEPS_PER_TURN = 15;
+const MAX_TOOL_STEPS_SUBORDINATE = 8;
 const POLL_NO_PROGRESS_BLOCK_THRESHOLD = 16;
 const POLL_BACKOFF_SCHEDULE_MS = [5000, 10000, 30000, 60000] as const;
+
+/**
+ * Build the system parameter for streamText/generateText.
+ * For Anthropic: returns a structured array with cache_control on the stable part.
+ * For others: returns a plain concatenated string.
+ */
+function buildSystemContent(
+  provider: string,
+  stable: string,
+  dynamic: string,
+): string | SystemModelMessage[] {
+  const combined = dynamic ? `${stable}\n\n${dynamic}` : stable;
+  if (provider === "anthropic") {
+    const parts: SystemModelMessage[] = [
+      {
+        role: "system",
+        content: stable,
+        providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+      },
+    ];
+    if (dynamic) {
+      parts.push({ role: "system", content: dynamic });
+    }
+    return parts;
+  }
+  return combined;
+}
 
 function resolveModelProviderOptions(provider: string) {
   if (provider === "codex-cli") {
@@ -740,7 +768,7 @@ export async function runAgent(options: {
   if (chat) {
     // Convert stored messages to ModelMessage format (including tool calls/results)
     const allMessages = convertChatMessagesToModelMessages(chat.messages);
-    const history = new History(80);
+    const history = new History(20);
     history.addMany(allMessages);
     context.history = history.getAll();
   }
@@ -760,12 +788,14 @@ export async function runAgent(options: {
   const toolNames = Object.keys(tools);
 
   // Build system prompt
-  const systemPrompt = await buildSystemPrompt({
+  const { stable, dynamic } = await buildSystemPrompt({
     projectId: options.projectId,
     chatId: options.chatId,
     agentNumber: options.agentNumber,
     tools: toolNames,
   });
+  const systemContent = buildSystemContent(settings.chatModel.provider, stable, dynamic);
+  const systemStr = dynamic ? `${stable}\n\n${dynamic}` : stable;
 
   // Append user message to history
   const messages: ModelMessage[] = [
@@ -775,7 +805,7 @@ export async function runAgent(options: {
 
   logLLMRequest({
     model: `${settings.chatModel.provider}/${settings.chatModel.model}`,
-    system: systemPrompt,
+    system: systemStr,
     messages,
     toolNames,
     temperature: settings.chatModel.temperature,
@@ -786,7 +816,7 @@ export async function runAgent(options: {
   // Run the agent with streaming
   const result = streamText({
     model,
-    system: systemPrompt,
+    system: systemContent,
     messages,
     providerOptions,
     tools,
@@ -807,7 +837,7 @@ export async function runAgent(options: {
         try {
           const continuation = await generateText({
             model,
-            system: systemPrompt,
+            system: systemContent,
             messages: [
               ...messages,
               ...responseMessages,
@@ -928,7 +958,7 @@ export async function runAgentText(options: {
   const chat = await getChat(options.chatId);
   if (chat) {
     const allMessages = convertChatMessagesToModelMessages(chat.messages);
-    const history = new History(80);
+    const history = new History(20);
     history.addMany(allMessages);
     context.history = history.getAll();
   }
@@ -946,12 +976,14 @@ export async function runAgentText(options: {
   tools = applyGlobalToolLoopGuard(tools);
   const toolNames = Object.keys(tools);
 
-  const systemPrompt = await buildSystemPrompt({
+  const { stable: stable2, dynamic: dynamic2 } = await buildSystemPrompt({
     projectId: options.projectId,
     chatId: options.chatId,
     agentNumber: options.agentNumber,
     tools: toolNames,
   });
+  const systemContent2 = buildSystemContent(settings.chatModel.provider, stable2, dynamic2);
+  const systemStr2 = dynamic2 ? `${stable2}\n\n${dynamic2}` : stable2;
 
   const messages: ModelMessage[] = [
     ...context.history,
@@ -960,7 +992,7 @@ export async function runAgentText(options: {
 
   logLLMRequest({
     model: `${settings.chatModel.provider}/${settings.chatModel.model}`,
-    system: systemPrompt,
+    system: systemStr2,
     messages,
     toolNames,
     temperature: settings.chatModel.temperature,
@@ -971,7 +1003,7 @@ export async function runAgentText(options: {
   try {
     const generated = await generateText({
       model,
-      system: systemPrompt,
+      system: systemContent2,
       messages,
       providerOptions,
       tools,
@@ -1081,11 +1113,13 @@ export async function runSubordinateAgent(options: {
   tools = applyGlobalToolLoopGuard(tools);
   const toolNames = Object.keys(tools);
 
-  const systemPrompt = await buildSystemPrompt({
+  const { stable: stable3, dynamic: dynamic3 } = await buildSystemPrompt({
     projectId: options.projectId,
     agentNumber: context.agentNumber,
     tools: toolNames,
   });
+  const systemContent3 = buildSystemContent(settings.chatModel.provider, stable3, dynamic3);
+  const systemStr3 = dynamic3 ? `${stable3}\n\n${dynamic3}` : stable3;
 
   // Include relevant parent history for context
   const relevantHistory = options.parentHistory.slice(-6);
@@ -1100,7 +1134,7 @@ export async function runSubordinateAgent(options: {
 
   logLLMRequest({
     model: `${settings.chatModel.provider}/${settings.chatModel.model}`,
-    system: systemPrompt,
+    system: systemStr3,
     messages,
     toolNames,
     temperature: settings.chatModel.temperature,
@@ -1111,7 +1145,7 @@ export async function runSubordinateAgent(options: {
   try {
     const { text } = await generateText({
       model,
-      system: systemPrompt,
+      system: systemContent3,
       messages,
       providerOptions,
       tools,

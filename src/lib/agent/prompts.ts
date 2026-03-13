@@ -62,44 +62,46 @@ async function getAllProjectFilesRecursive(
 }
 
 /**
- * Build the complete system prompt for the agent
+ * Build the complete system prompt for the agent.
+ * Returns stable (cacheable) and dynamic parts separately for Anthropic prompt caching.
  */
 export async function buildSystemPrompt(options: {
   projectId?: string;
   chatId?: string;
   agentNumber?: number;
   tools?: string[];
-}): Promise<string> {
-  const parts: string[] = [];
+}): Promise<{ stable: string; dynamic: string }> {
+  const stableParts: string[] = [];
+  const dynamicParts: string[] = [];
 
-  // 1. Base system prompt
+  // 1. Base system prompt (stable)
   const basePrompt = await loadPrompt("system");
   if (basePrompt) {
-    parts.push(basePrompt);
+    stableParts.push(basePrompt);
   } else {
-    parts.push(getDefaultSystemPrompt());
+    stableParts.push(getDefaultSystemPrompt());
   }
 
-  // 2. Agent identity
+  // 2. Agent identity (stable)
   const agentNum = options.agentNumber ?? 0;
-  parts.push(
+  stableParts.push(
     `\n## Agent Identity\nYou are AI Agent` +
     (agentNum === 0
       ? "You are the primary agent communicating directly with the user."
       : `You are a subordinate agent (level ${agentNum}), delegated a task by Agent ${agentNum - 1}.`)
   );
 
-  // 3. Tool prompts
+  // 3. Tool prompts (stable)
   if (options.tools && options.tools.length > 0) {
     const mcpToolNames = options.tools.filter((t) => t.startsWith("mcp_"));
     for (const toolName of options.tools) {
       const toolPrompt = await loadPrompt(`tool-${toolName}`);
       if (toolPrompt) {
-        parts.push(`\n## Tool: ${toolName}\n${toolPrompt}`);
+        stableParts.push(`\n## Tool: ${toolName}\n${toolPrompt}`);
       }
     }
     if (mcpToolNames.length > 0) {
-      parts.push(
+      stableParts.push(
         `\n## MCP (Model Context Protocol) tools\n` +
         `This project has ${mcpToolNames.length} tool(s) from connected MCP servers. ` +
         `Tool names are prefixed with \`mcp_<server>_<tool>\`. Use them when the task matches their description.\n\n` +
@@ -110,7 +112,7 @@ export async function buildSystemPrompt(options: {
       );
     }
 
-    parts.push(
+    stableParts.push(
       `\n## Tool Loop Safety\n` +
       `- After a failed tool call, do not repeat the same tool with identical arguments.\n` +
       `- Use the tool's error details to change parameters before retrying.\n` +
@@ -119,11 +121,11 @@ export async function buildSystemPrompt(options: {
     );
   }
 
-  // 4. Project instructions and Skills
+  // 4. Project instructions and Skills (dynamic)
   if (options.projectId) {
     const project = await getProject(options.projectId);
     if (project) {
-      parts.push(
+      dynamicParts.push(
         `\n## Active Project: ${project.name}\n` +
         `Description: ${project.description}\n` +
         (project.instructions
@@ -134,7 +136,7 @@ export async function buildSystemPrompt(options: {
       // 4b. Project Skills — metadata only at startup; full instructions via load_skill tool (integrate-skills)
       const skillsMeta = await loadProjectSkillsMetadata(options.projectId);
       if (skillsMeta.length > 0) {
-        parts.push(
+        dynamicParts.push(
           `\n## Project Skills (available)\n` +
           `This project has ${skillsMeta.length} skill(s). Match the user's task to a skill by description. When a task matches a skill, call the **load_skill** tool with that skill's name to load its full instructions, then follow them. Use only skills that apply.\n` +
           `<available_skills>\n` +
@@ -150,23 +152,22 @@ export async function buildSystemPrompt(options: {
     }
   }
 
-  // 5. Available Files (Project Directory + Chat Uploaded)
+  // 5. Available Files (dynamic)
   if (options.projectId || options.chatId) {
     const filesSections: string[] = [];
 
-    // 5a. Project directory files
     if (options.projectId) {
       try {
         const projectFiles = await getAllProjectFilesRecursive(options.projectId);
         if (projectFiles.length > 0) {
           const rows = projectFiles
-            .slice(0, 50) // Limit to 50 files to avoid huge prompts
+            .slice(0, 15) // Limit to 15 files to avoid huge prompts
             .map((f) => `| ${f.name} | ${f.path} | ${formatFileSize(f.size)} |`)
             .join("\n");
           filesSections.push(
             `### Project Directory Files\n` +
             `| File | Path | Size |\n|------|------|------|\n${rows}` +
-            (projectFiles.length > 50 ? `\n\n*...and ${projectFiles.length - 50} more files*` : "")
+            (projectFiles.length > 15 ? `\n\n*...and ${projectFiles.length - 15} more files*` : "")
           );
         }
       } catch {
@@ -174,7 +175,6 @@ export async function buildSystemPrompt(options: {
       }
     }
 
-    // 5b. Chat uploaded files
     if (options.chatId) {
       try {
         const chatFiles = await getChatFiles(options.chatId);
@@ -193,7 +193,7 @@ export async function buildSystemPrompt(options: {
     }
 
     if (filesSections.length > 0) {
-      parts.push(
+      dynamicParts.push(
         `\n## Available Files\n` +
         `These files are available in this context. You can read them using the code_execution tool.\n\n` +
         filesSections.join("\n\n")
@@ -201,15 +201,18 @@ export async function buildSystemPrompt(options: {
     }
   }
 
-  // 6. Current date/time (rounded to the hour for prompt caching)
+  // 6. Current date/time (rounded to the hour for prompt caching — dynamic)
   const now = new Date();
   now.setMinutes(0, 0, 0);
   const dateStr = now.toISOString().slice(0, 13) + ":00:00Z";
-  parts.push(
+  dynamicParts.push(
     `\n## Current Information\n- Date/Time: ${dateStr}\n- Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`
   );
 
-  return parts.join("\n\n");
+  return {
+    stable: stableParts.join("\n\n"),
+    dynamic: dynamicParts.join("\n\n"),
+  };
 }
 
 /**
