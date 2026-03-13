@@ -1533,7 +1533,9 @@ function createReasoningAwareFetch(): typeof fetch {
                     (choice.delta.content === "" || choice.delta.content == null) &&
                     choice.delta.reasoning
                   ) {
-                    choice.delta.content = choice.delta.reasoning;
+                    // Suppress reasoning-only chunks; tool_calls pass through normally
+                    delete choice.delta.reasoning;
+                    if (choice.delta.content == null) choice.delta.content = "";
                   }
                 }
               }
