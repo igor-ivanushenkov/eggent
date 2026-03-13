@@ -194,12 +194,12 @@ export async function GET(req: NextRequest) {
 
         return Response.json({ models });
     } catch (error) {
+        const msg = error instanceof Error ? error.message : "Failed to fetch models";
+        // Auth/quota errors are expected during key input — return empty list, not 500
+        const isClientError = /40[134]|quota|unauthorized|forbidden/i.test(msg);
         return Response.json(
-            {
-                error: error instanceof Error ? error.message : "Failed to fetch models",
-                models: [],
-            },
-            { status: 500 }
+            { error: msg, models: [] },
+            { status: isClientError ? 200 : 500 }
         );
     }
 }
