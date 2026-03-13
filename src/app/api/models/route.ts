@@ -78,6 +78,21 @@ export async function GET(req: NextRequest) {
                 break;
             }
 
+            case "custom": {
+                const baseUrl = (searchParams.get("baseUrl") || "").trim().replace(/\/+$/, "");
+                if (!baseUrl) break;
+                const res = await fetch(`${baseUrl}/models`, {
+                    headers: { Authorization: `Bearer ${apiKey}` },
+                });
+                if (!res.ok) throw new Error(`Custom provider API error: ${res.status}`);
+                const data = await res.json();
+                const rawModels = Array.isArray(data) ? data : (data.data || []);
+                models = rawModels
+                    .map((m: { id: string; name?: string }) => ({ id: m.id, name: m.name || m.id }))
+                    .sort((a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id));
+                break;
+            }
+
             case "ollama": {
                 const rawBaseUrl = (searchParams.get("baseUrl") || "http://localhost:11434").trim();
                 const normalizedBaseUrl = rawBaseUrl
