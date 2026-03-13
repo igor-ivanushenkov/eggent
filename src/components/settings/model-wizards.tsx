@@ -747,7 +747,7 @@ export function EmbeddingsModelWizard({
         </div>
       )}
 
-      {provider === "ollama" && (
+      {(provider === "ollama" || provider === "custom") && (
         <div
           className={`space-y-2 transition-all duration-300 ${
             !hasProvider ? "opacity-40 pointer-events-none" : ""
@@ -761,7 +761,7 @@ export function EmbeddingsModelWizard({
             onChange={(event) =>
               updateSettings("embeddingsModel.baseUrl", event.target.value)
             }
-            placeholder="http://localhost:11434/v1"
+            placeholder={provider === "ollama" ? "http://localhost:11434/v1" : "https://api.example.com/v1"}
             disabled={!hasProvider}
           />
         </div>
