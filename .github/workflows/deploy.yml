@@ -15,6 +15,7 @@ jobs:
           host: 138.124.87.134
           username: deploy
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 30m
           script: |
             cd ~/eggent
             git pull origin main
