@@ -414,6 +414,44 @@ function extractAccessCodeCandidate(text: string): string | null {
   return null;
 }
 
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function markdownToTelegramHtml(text: string): string {
+  const codeBlocks: string[] = [];
+
+  // Extract fenced code blocks first to protect them
+  let s = text.replace(/```(?:[^\n`]*)?\n?([\s\S]*?)```/g, (_m, code: string) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push(`<pre><code>${escapeHtml(code.trim())}</code></pre>`);
+    return `\x00BLOCK${idx}\x00`;
+  });
+
+  // Escape HTML in the rest
+  s = escapeHtml(s);
+
+  // ## Heading → <b>Heading</b>
+  s = s.replace(/^#{1,6} +(.+)$/gm, "<b>$1</b>");
+
+  // **bold**
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
+
+  // *italic* (single star, not touching another star)
+  s = s.replace(/(?<!\*)\*(?!\*)([^*\n]+)(?<!\*)\*(?!\*)/g, "<i>$1</i>");
+
+  // `inline code`
+  s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+
+  // [text](url)
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2">$1</a>');
+
+  // Restore code blocks
+  s = s.replace(/\x00BLOCK(\d+)\x00/g, (_m, idx) => codeBlocks[parseInt(idx)]);
+
+  return s;
+}
+
 function normalizeOutgoingText(text: string): string {
   const value = text.trim();
   if (!value) return "Пустой ответ от агента.";
@@ -428,6 +466,7 @@ async function sendTelegramMessage(
   replyToMessageId?: number,
   replyMarkup?: Record<string, unknown>
 ): Promise<void> {
+  const html = markdownToTelegramHtml(normalizeOutgoingText(text));
   const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: "POST",
     headers: {
@@ -435,7 +474,8 @@ async function sendTelegramMessage(
     },
     body: JSON.stringify({
       chat_id: chatId,
-      text: normalizeOutgoingText(text),
+      text: html,
+      parse_mode: "HTML",
       ...(typeof replyToMessageId === "number" ? { reply_to_message_id: replyToMessageId } : {}),
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     }),
