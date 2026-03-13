@@ -1509,15 +1509,61 @@ function normalizeBaseUrl(rawBaseUrl: string | undefined, settings: {
   return parsed.toString().replace(/\/$/, "");
 }
 
+function createReasoningAwareFetch(): typeof fetch {
+  return async (input, init) => {
+    const response = await fetch(input, init);
+    if (!response.headers.get("content-type")?.includes("text/event-stream") || !response.body) {
+      return response;
+    }
+    const decoder = new TextDecoder();
+    const encoder = new TextEncoder();
+    const transformedStream = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        const text = decoder.decode(chunk, { stream: true });
+        const transformed = text
+          .split("\n")
+          .map((line) => {
+            if (!line.startsWith("data: ") || line === "data: [DONE]") return line;
+            try {
+              const json = JSON.parse(line.slice(6));
+              if (json.choices) {
+                for (const choice of json.choices) {
+                  if (
+                    choice.delta &&
+                    (choice.delta.content === "" || choice.delta.content == null) &&
+                    choice.delta.reasoning
+                  ) {
+                    choice.delta.content = choice.delta.reasoning;
+                  }
+                }
+              }
+              return "data: " + JSON.stringify(json);
+            } catch {
+              return line;
+            }
+          })
+          .join("\n");
+        controller.enqueue(encoder.encode(transformed));
+      },
+    });
+    return new Response(response.body.pipeThrough(transformedStream), {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  };
+}
+
 function createOpenAICompatibleChatModel(
   config: ModelConfig,
-  settings: OpenAICompatibleSettings
+  settings: OpenAICompatibleSettings & { mapReasoningToContent?: boolean }
 ): LanguageModel {
   const baseURL = normalizeBaseUrl(config.baseUrl, settings);
   const provider = createOpenAI({
     apiKey: settings.apiKey,
     baseURL,
     name: settings.providerName,
+    ...(settings.mapReasoningToContent ? { fetch: createReasoningAwareFetch() } : {}),
   });
   return provider.chat(config.model);
 }
@@ -1601,6 +1647,7 @@ export function createModel(
         apiKey: config.apiKey || "",
         baseUrlRequired: true,
         defaultPath: "/v1",
+        mapReasoningToContent: true,
       });
     }
 
