@@ -190,7 +190,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
 
         {/* Project selector */}
-        <SidebarGroup>
+        <SidebarGroup className="mx-1 rounded-lg border border-sidebar-border bg-sidebar-accent/20 min-h-28">
           <SidebarGroupLabel>Project</SidebarGroupLabel>
           <SidebarMenu>
             {projects.length === 0 && (
@@ -228,7 +228,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
 
         {/* Chat history */}
-        <SidebarGroup>
+        <SidebarGroup className="mx-1 rounded-lg border border-sidebar-border bg-sidebar-accent/20 flex-1 min-h-40">
           <SidebarGroupLabel>
             <MessagesSquare className="size-3.5 mr-1" />
             Chats

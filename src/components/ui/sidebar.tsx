@@ -27,7 +27,7 @@ import {
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-const SIDEBAR_WIDTH = "28rem"
+const SIDEBAR_WIDTH = "20rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
@@ -40,6 +40,8 @@ type SidebarContextProps = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
+  sidebarWidth: string
+  setSidebarWidth: (width: string) => void
 }
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null)
@@ -68,6 +70,7 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
+  const [sidebarWidth, setSidebarWidth] = React.useState(SIDEBAR_WIDTH)
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -122,8 +125,10 @@ function SidebarProvider({
       openMobile,
       setOpenMobile,
       toggleSidebar,
+      sidebarWidth,
+      setSidebarWidth,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, sidebarWidth, setSidebarWidth]
   )
 
   return (
@@ -133,7 +138,7 @@ function SidebarProvider({
           data-slot="sidebar-wrapper"
           style={
             {
-              "--sidebar-width": SIDEBAR_WIDTH,
+              "--sidebar-width": sidebarWidth,
               "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
               ...style,
             } as React.CSSProperties
@@ -163,7 +168,7 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const { isMobile, state, openMobile, setOpenMobile, setSidebarWidth } = useSidebar()
 
   if (collapsible === "none") {
     return (
@@ -229,7 +234,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
+          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex relative",
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
             : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -248,6 +253,27 @@ function Sidebar({
         >
           {children}
         </div>
+        {/* Resize handle */}
+        <div
+          data-slot="sidebar-resize-handle"
+          className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none z-50 hover:bg-primary/30 active:bg-primary/50 transition-colors"
+          onMouseDown={(e) => {
+            e.preventDefault()
+            const container = (e.currentTarget.parentElement as HTMLElement)
+            const startX = e.clientX
+            const startWidth = container.getBoundingClientRect().width
+            const onMouseMove = (ev: MouseEvent) => {
+              const newWidth = Math.max(160, Math.min(600, startWidth + ev.clientX - startX))
+              setSidebarWidth(`${newWidth}px`)
+            }
+            const onMouseUp = () => {
+              document.removeEventListener("mousemove", onMouseMove)
+              document.removeEventListener("mouseup", onMouseUp)
+            }
+            document.addEventListener("mousemove", onMouseMove)
+            document.addEventListener("mouseup", onMouseUp)
+          }}
+        />
       </div>
     </div>
   )
