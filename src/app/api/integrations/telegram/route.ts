@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
+import { generateText } from "ai";
 import {
   ExternalMessageError,
   handleExternalMessage,
@@ -28,6 +29,8 @@ import {
   saveExternalSession,
 } from "@/lib/storage/external-session-store";
 import { getAllProjects } from "@/lib/storage/project-store";
+import { createModel } from "@/lib/providers/llm-provider";
+import { getSettings } from "@/lib/storage/settings-store";
 
 const TELEGRAM_TEXT_LIMIT = 4096;
 const TELEGRAM_FILE_MAX_BYTES = 30 * 1024 * 1024;
@@ -83,6 +86,7 @@ interface TelegramApiResponse {
 interface TelegramIncomingFile {
   fileId: string;
   fileName: string;
+  mimeType?: string;
 }
 
 interface TelegramExternalChatContext {
@@ -312,17 +316,17 @@ function extractIncomingFile(
   if (audioFileId) {
     const audioNameRaw =
       typeof message.audio?.file_name === "string" ? message.audio.file_name : "";
+    const audioMimeType =
+      typeof message.audio?.mime_type === "string" ? message.audio.mime_type : undefined;
     const fallback = buildIncomingFileName({
       base: "audio",
       messageId,
-      mimeType:
-        typeof message.audio?.mime_type === "string"
-          ? message.audio.mime_type
-          : undefined,
+      mimeType: audioMimeType,
     });
     return {
       fileId: audioFileId,
       fileName: withMessageIdPrefix(sanitizeFileName(audioNameRaw || fallback), messageId),
+      mimeType: audioMimeType,
     };
   }
 
@@ -348,22 +352,45 @@ function extractIncomingFile(
   const voiceFileId =
     typeof message.voice?.file_id === "string" ? message.voice.file_id.trim() : "";
   if (voiceFileId) {
+    const voiceMimeType =
+      typeof message.voice?.mime_type === "string"
+        ? message.voice.mime_type
+        : "audio/ogg";
     return {
       fileId: voiceFileId,
       fileName: sanitizeFileName(
-        buildIncomingFileName({
-          base: "voice",
-          messageId,
-          mimeType:
-            typeof message.voice?.mime_type === "string"
-              ? message.voice.mime_type
-              : undefined,
-        })
+        buildIncomingFileName({ base: "voice", messageId, mimeType: voiceMimeType })
       ),
+      mimeType: voiceMimeType,
     };
   }
 
   return null;
+}
+
+async function transcribeVoiceMessage(buffer: Buffer, mimeType: string): Promise<string> {
+  const settings = await getSettings();
+  const model = createModel(settings.chatModel);
+  const { text } = await generateText({
+    model,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "file",
+            data: buffer,
+            mimeType: mimeType as `audio/${string}`,
+          },
+          {
+            type: "text",
+            text: "Transcribe this voice message. Return only the transcribed text, nothing else.",
+          },
+        ],
+      },
+    ],
+  });
+  return text.trim();
 }
 
 async function downloadTelegramFile(botToken: string, fileId: string): Promise<Buffer> {
@@ -746,12 +773,13 @@ export async function POST(req: NextRequest) {
 
     const incomingFile = message ? extractIncomingFile(message, messageId) : null;
     let externalContext: TelegramExternalChatContext | null = null;
+    let fileBuffer: Buffer | null = null;
     if (incomingFile) {
       externalContext = await ensureTelegramExternalChatContext({
         sessionId,
         defaultProjectId,
       });
-      const fileBuffer = await downloadTelegramFile(botToken, incomingFile.fileId);
+      fileBuffer = await downloadTelegramFile(botToken, incomingFile.fileId);
       const saved = await saveChatFile(
         externalContext.chatId,
         fileBuffer,
@@ -764,7 +792,18 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    if (!incomingText) {
+    let resolvedIncomingText = incomingText;
+
+    if (!resolvedIncomingText && incomingFile?.mimeType?.startsWith("audio/") && fileBuffer) {
+      try {
+        resolvedIncomingText = await transcribeVoiceMessage(fileBuffer, incomingFile.mimeType);
+      } catch (transcribeError) {
+        console.error("Voice transcription failed:", transcribeError);
+        // fall through to the file-saved response below
+      }
+    }
+
+    if (!resolvedIncomingText) {
       if (incomingSavedFile) {
         await sendTelegramMessage(
           botToken,
@@ -792,8 +831,8 @@ export async function POST(req: NextRequest) {
       const result = await handleExternalMessage({
         sessionId,
         message: incomingSavedFile
-          ? `${incomingText}\n\nAttached file: ${incomingSavedFile.name}`
-          : incomingText,
+          ? `${resolvedIncomingText}\n\nAttached file: ${incomingSavedFile.name}`
+          : resolvedIncomingText,
         projectId: externalContext?.projectId ?? defaultProjectId,
         chatId: externalContext?.chatId,
         currentPath: normalizeTelegramCurrentPath(externalContext?.currentPath),

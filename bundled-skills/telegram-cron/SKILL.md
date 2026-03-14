@@ -14,44 +14,66 @@ When the user asks from **within a Telegram chat**, `telegramChatId` is injected
 
 When called from the **web UI**, you must include `payload.telegramChatId` explicitly (numeric Telegram chat ID).
 
-## Tool Call
+## One-Time Reminder vs Recurring — Pick One
 
-Use the `cron` tool with `action: "add"`:
+### One-time reminder (fires once after a delay)
+
+Use `delaySeconds` — compute the number of seconds from now (current UTC time) until the target time.
 
 ```json
 {
   "action": "add",
   "job": {
-    "name": "Human-readable job name",
-    "schedule": { "kind": "cron", "expr": "0 9 4 * *" },
+    "name": "Reminder at 18:00",
+    "delaySeconds": 3600,
     "payload": {
-      "prompt": "Send the user a reminder: 'Подай показания счётчиков'"
+      "prompt": "Send the user a reminder: 'Time to submit the report!'"
     }
   }
 }
 ```
 
-> When called from Telegram, `telegramChatId` is auto-set. Do not pass it as `null` or omit it from the payload — just leave it out and it will be filled in automatically.
+> Example: if it is now 17:00 UTC and the user wants a reminder at 18:00 UTC, set `delaySeconds: 3600`.
 
-## Schedule Format
+### Recurring reminder (fires on a cron schedule)
 
-Use `{ "kind": "cron", "expr": "<5-field cron>" }`. Field order: `minute hour day-of-month month day-of-week`
+Use `schedule: { "kind": "cron", "expr": "<5-field cron>" }` — **`schedule` must be an object, NOT a plain string**.
 
-For a one-time reminder use `"delaySeconds": N` instead of `schedule`.
+```json
+{
+  "action": "add",
+  "job": {
+    "name": "Daily standup reminder",
+    "schedule": { "kind": "cron", "expr": "0 9 * * 1-5" },
+    "payload": {
+      "prompt": "Send the user a reminder: 'Time for standup!'"
+    }
+  }
+}
+```
+
+**WRONG** — do NOT pass schedule as a plain string:
+```json
+{ "schedule": "0 9 * * 1-5" }
+```
+
+## Cron Expr Field Order
+
+`minute hour day-of-month month day-of-week`
 
 | Example | Meaning |
 |---|---|
-| `0 9 4 * *` | 4th of every month at 9:00 |
-| `0 8 * * 1` | Every Monday at 8:00 |
-| `30 18 * * 1-5` | Weekdays at 18:30 |
-| `0 10 * * *` | Every day at 10:00 |
+| `0 9 4 * *` | 4th of every month at 9:00 UTC |
+| `0 8 * * 1` | Every Monday at 8:00 UTC |
+| `30 18 * * 1-5` | Weekdays at 18:30 UTC |
+| `0 10 * * *` | Every day at 10:00 UTC |
 
 ## Managing Jobs
 
 ```json
 { "action": "list" }
 { "action": "remove", "jobId": "<id>" }
-{ "action": "update", "jobId": "<id>", "patch": { "schedule": "0 10 * * *" } }
+{ "action": "update", "jobId": "<id>", "patch": { "schedule": { "kind": "cron", "expr": "0 10 * * *" } } }
 { "action": "run", "jobId": "<id>" }
 ```
 
@@ -59,3 +81,4 @@ For a one-time reminder use `"delaySeconds": N` instead of `schedule`.
 
 - `payload.prompt` is the instruction the agent executes at run time — the result is sent back to Telegram
 - The Telegram bot token must be configured in Settings → Integrations for delivery to work
+- All times in cron expressions are **UTC**
