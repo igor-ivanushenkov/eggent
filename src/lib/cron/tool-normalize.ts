@@ -225,7 +225,7 @@ function normalizeScheduleFromRecord(input: UnknownRecord): CronSchedule | null 
             ? everyHours * 3_600_000
             : undefined;
   const anchorMs = readNumber(scheduleRaw.anchorMs);
-  const expr = readString(scheduleRaw.expr) ?? readString(scheduleRaw.cronExpr);
+  const expr = readString(scheduleRaw.expr) ?? readString(scheduleRaw.cronExpr) ?? readString(scheduleRaw.cron);
   const tz = readString(scheduleRaw.tz) ?? readString(scheduleRaw.cronTz);
 
   const kind =

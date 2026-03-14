@@ -23,7 +23,7 @@ Use the `cron` tool with `action: "add"`:
   "action": "add",
   "job": {
     "name": "Human-readable job name",
-    "schedule": "0 9 4 * *",
+    "schedule": { "kind": "cron", "expr": "0 9 4 * *" },
     "payload": {
       "prompt": "Send the user a reminder: 'Подай показания счётчиков'"
     }
@@ -35,7 +35,9 @@ Use the `cron` tool with `action: "add"`:
 
 ## Schedule Format
 
-Standard 5-field cron: `minute hour day-of-month month day-of-week`
+Use `{ "kind": "cron", "expr": "<5-field cron>" }`. Field order: `minute hour day-of-month month day-of-week`
+
+For a one-time reminder use `"delaySeconds": N` instead of `schedule`.
 
 | Example | Meaning |
 |---|---|
