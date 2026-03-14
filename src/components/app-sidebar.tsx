@@ -222,7 +222,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <FolderOpen className="size-3.5 mr-1" />
             Files
           </SidebarGroupLabel>
-          <div className="px-2">
+          <div className="px-2 max-h-64 overflow-y-auto">
             <FileTree projectId={activeProjectId ?? "none"} />
           </div>
         </SidebarGroup>
