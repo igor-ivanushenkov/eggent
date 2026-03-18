@@ -401,6 +401,7 @@ export async function closeMcpConnection(conn: McpConnection): Promise<void> {
 
 /**
  * Load project MCP config, connect to all servers, list tools, and build agent ToolSet + cleanup.
+ * Connections are cached in the MCP pool — only the first call per project pays the startup cost.
  * Tool names are prefixed: mcp_<serverId>_<toolName> to avoid collisions.
  */
 export async function getProjectMcpTools(projectId: string): Promise<{
@@ -409,32 +410,26 @@ export async function getProjectMcpTools(projectId: string): Promise<{
   serverIds: string[];
 } | null> {
   const { loadProjectMcpServers } = await import("@/lib/storage/project-store");
+  const { getPooledConnections } = await import("@/lib/mcp/pool");
+
   const config = await loadProjectMcpServers(projectId);
   if (!config?.servers?.length) return null;
 
-  const connections: McpConnection[] = [];
-  const toolMetaByKey: Record<string, McpToolMeta & { conn: McpConnection }> = {};
-  const deterministicFailureByCall = new Map<string, string>();
-  const knownN8nWorkflowIds = new Set<string>();
+  // Get cached connections (starts processes only on first call or after config change)
+  const cachedServers = await getPooledConnections(projectId, config.servers);
+  if (!cachedServers || cachedServers.length === 0) return null;
 
-  for (const server of config.servers) {
-    const conn = await connectMcpServer(server);
-    if (!conn) continue;
-    connections.push(conn);
-    const tools = await listMcpTools(conn.client);
-    for (const t of tools) {
-      const key = `mcp_${server.id}_${t.name}`;
-      toolMetaByKey[key] = {
-        serverId: server.id,
-        name: t.name,
-        description: t.description,
-        inputSchema: t.inputSchema,
-        conn,
-      };
+  // Build tool metadata index from cached servers
+  const toolMetaByKey: Record<string, McpToolMeta & { conn: McpConnection }> = {};
+  for (const server of cachedServers) {
+    for (const t of server.tools) {
+      toolMetaByKey[t.key] = { ...t, conn: server.conn };
     }
   }
 
-  if (connections.length === 0) return null;
+  // Per-request state (loop guards) — NOT cached
+  const deterministicFailureByCall = new Map<string, string>();
+  const knownN8nWorkflowIds = new Set<string>();
 
   const tools: ToolSet = {};
   for (const [key, meta] of Object.entries(toolMetaByKey)) {
@@ -529,15 +524,12 @@ export async function getProjectMcpTools(projectId: string): Promise<{
     });
   }
 
-  async function cleanup() {
-    for (const conn of connections) {
-      await closeMcpConnection(conn);
-    }
-  }
+  // cleanup is a no-op — connections stay alive in the pool
+  async function cleanup() {}
 
   return {
     tools,
     cleanup,
-    serverIds: [...new Set(connections.map((c) => c.serverId))],
+    serverIds: cachedServers.map((s) => s.serverId),
   };
 }

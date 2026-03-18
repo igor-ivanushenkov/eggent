@@ -1798,6 +1798,8 @@ export function createAgentTools(
           server
         );
         if (result.success) {
+          const { invalidateMcpPool } = await import("@/lib/mcp/pool");
+          await invalidateMcpPool(context.projectId!);
           return `MCP server "${payload.id}" ${result.action} in ${result.filePath}.`;
         }
         return `Failed to upsert MCP server: ${result.error}`;
@@ -1813,6 +1815,8 @@ export function createAgentTools(
       execute: async ({ server_id }) => {
         const result = await deleteProjectMcpServer(context.projectId!, server_id);
         if (result.success) {
+          const { invalidateMcpPool } = await import("@/lib/mcp/pool");
+          await invalidateMcpPool(context.projectId!);
           return `MCP server "${server_id}" deleted from ${result.filePath}.`;
         }
         return `Failed to delete MCP server: ${result.error}`;
