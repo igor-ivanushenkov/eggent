@@ -560,7 +560,7 @@ async function executeCronJob(job: CronJob): Promise<RunResult> {
 
   const formatTelegramCronResult = (result: RunResult): string => {
     if (result.status === "ok") {
-      return `Cron "${job.name}" выполнен.\n\n${result.summary ?? "Без текста ответа."}`;
+      return result.summary ?? "✓";
     }
     if (result.status === "skipped") {
       return `Cron "${job.name}" пропущен.\n\n${result.error ?? "Пустой ответ."}`;

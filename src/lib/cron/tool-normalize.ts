@@ -22,6 +22,7 @@ const CRON_JOB_KEYS: ReadonlySet<string> = new Set([
   "delayMs",
   "payload",
   "message",
+  "prompt",
   "payloadMessage",
   "text",
   "chatId",
@@ -301,8 +302,10 @@ function normalizePayloadFromRecord(input: UnknownRecord): CronJobCreate["payloa
   const kind = rawKind === "agentturn" ? "agentTurn" : rawKind;
   const message =
     readString(payload.message) ??
+    readString(payload.prompt) ??
     readString(payload.text) ??
     readString(input.message) ??
+    readString(input.prompt) ??
     readString(input.payloadMessage) ??
     readString(input.text);
 

@@ -2,15 +2,17 @@ const ISO_TZ_RE = /(Z|[+-]\d{2}:?\d{2})$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_DATE_TIME_RE = /^\d{4}-\d{2}-\d{2}T/;
 
+const DEFAULT_OFFSET = "+03:00"; // Moscow Time (MSK, UTC+3)
+
 function normalizeUtcIso(raw: string): string {
   if (ISO_TZ_RE.test(raw)) {
     return raw;
   }
   if (ISO_DATE_RE.test(raw)) {
-    return `${raw}T00:00:00Z`;
+    return `${raw}T00:00:00${DEFAULT_OFFSET}`;
   }
   if (ISO_DATE_TIME_RE.test(raw)) {
-    return `${raw}Z`;
+    return `${raw}${DEFAULT_OFFSET}`;
   }
   return raw;
 }
