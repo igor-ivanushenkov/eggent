@@ -16,6 +16,7 @@ services:
       PLAYWRIGHT_BROWSERS_PATH: ${PLAYWRIGHT_BROWSERS_PATH:-/app/data/ms-playwright}
       npm_config_cache: ${NPM_CONFIG_CACHE:-/app/data/npm-cache}
       XDG_CACHE_HOME: ${XDG_CACHE_HOME:-/app/data/.cache}
+      XDG_DATA_HOME: ${XDG_DATA_HOME:-/app/data/xdg-data}
     ports:
       - "${APP_BIND_HOST:-127.0.0.1}:${APP_PORT:-3000}:3000"
     volumes:
