@@ -666,7 +666,7 @@ async function executeCronJob(job: CronJob): Promise<RunResult> {
           ])
         : await runPromise;
 
-    const summary = output.trim();
+    const summary = output.trim() || job.payload.message.trim();
     return await deliverToTelegram({
       status: summary ? "ok" : "skipped",
       summary: summary || undefined,

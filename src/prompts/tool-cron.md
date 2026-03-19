@@ -5,7 +5,8 @@ When the user asks to "remind later", "через N минут/секунд", "�
 Timezone rules:
 - The user's default timezone is **MSK (UTC+3)**. When the user says a time without specifying a timezone, treat it as MSK.
 - To schedule at a specific local time, convert to UTC: subtract 3 hours. Example: 15:12 MSK = 12:12 UTC.
-- Use `schedule.kind="at"` with an absolute ISO timestamp (UTC) for specific-time reminders — do NOT use `delaySeconds` when the user names a clock time.
+- Use `schedule.kind="at"` with an absolute ISO timestamp for specific-time reminders — do NOT use `delaySeconds` when the user names a clock time.
+- **NEVER compute `delaySeconds` by subtracting UTC from MSK** — that gives the wrong result. For "в 16:22" just use `schedule: { "kind": "at", "at": "YYYY-MM-DDT16:22:00+03:00" }` with today's date from the system prompt.
 - The current UTC and MSK times are provided in the system prompt under "Current Information" — use them to compute the correct ISO timestamp.
 
 Rules:
