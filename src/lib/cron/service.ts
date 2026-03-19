@@ -521,12 +521,13 @@ async function executeCronJob(job: CronJob): Promise<RunResult> {
     };
   }
 
-  const chatId = (job.payload.chatId?.trim() || `cron-${job.id}`);
+  // Use a fresh chat for each cron run so the agent starts without history.
+  // The original chatId (where the reminder was set) is intentionally NOT used here —
+  // loading that history causes the agent to respond with context about the reminder setup
+  // instead of simply delivering the scheduled message.
+  const chatId = `cron-run-${job.id}-${startedAt}`;
   const projectId = job.projectId === GLOBAL_CRON_PROJECT_ID ? undefined : job.projectId;
-  const existingChat = await getChat(chatId);
-  if (!existingChat) {
-    await createChat(chatId, `Cron: ${job.name}`, projectId);
-  }
+  await createChat(chatId, `Cron: ${job.name}`, projectId);
 
   const timeoutMs =
     typeof job.payload.timeoutSeconds === "number"
