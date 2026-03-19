@@ -201,12 +201,17 @@ export async function buildSystemPrompt(options: {
     }
   }
 
-  // 6. Current date/time (rounded to the hour for prompt caching — dynamic)
+  // 6. Current date/time (rounded to 5 minutes for prompt caching — dynamic)
   const now = new Date();
-  now.setMinutes(0, 0, 0);
-  const dateStr = now.toISOString().slice(0, 13) + ":00:00Z";
+  const roundedMs = Math.floor(now.getTime() / 300_000) * 300_000;
+  const rounded = new Date(roundedMs);
+  const utcStr = rounded.toISOString().replace(/\.\d{3}Z$/, "Z");
+  // MSK = UTC+3, always fixed offset (no DST)
+  const mskOffset = 3 * 60 * 60 * 1000;
+  const mskDate = new Date(roundedMs + mskOffset);
+  const mskStr = mskDate.toISOString().replace(/\.\d{3}Z$/, "").replace("T", " ") + " MSK (UTC+3)";
   dynamicParts.push(
-    `\n## Current Information\n- Date/Time: ${dateStr}\n- Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`
+    `\n## Current Information\n- Date/Time (UTC): ${utcStr}\n- Date/Time (MSK): ${mskStr}\n- Server Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}\n- User default timezone: MSK (UTC+3, Europe/Moscow)`
   );
 
   return {

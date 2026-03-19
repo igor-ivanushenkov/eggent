@@ -2,6 +2,12 @@ Use this tool for any delayed or scheduled action.
 
 When the user asks to "remind later", "через N минут/секунд", "по расписанию", or "every day/week", prefer `cron` instead of `code_execution`.
 
+Timezone rules:
+- The user's default timezone is **MSK (UTC+3)**. When the user says a time without specifying a timezone, treat it as MSK.
+- To schedule at a specific local time, convert to UTC: subtract 3 hours. Example: 15:12 MSK = 12:12 UTC.
+- Use `schedule.kind="at"` with an absolute ISO timestamp (UTC) for specific-time reminders — do NOT use `delaySeconds` when the user names a clock time.
+- The current UTC and MSK times are provided in the system prompt under "Current Information" — use them to compute the correct ISO timestamp.
+
 Rules:
 - For one-time reminders: use `action="add"` with `schedule.kind="at"` and ISO timestamp.
 - For recurring reminders: use `schedule.kind="every"` or `schedule.kind="cron"`.
