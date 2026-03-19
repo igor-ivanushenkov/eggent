@@ -7,7 +7,8 @@ Rules:
 - For recurring reminders: use `schedule.kind="every"` or `schedule.kind="cron"`.
 - For sub-minute recurring reminders, use `schedule.kind="every"` with `everyMs` (example: 30s -> `everyMs=30000`).
 - Put the actual reminder text/instruction in `payload.message`.
-- Do not send raw natural-language text as the job definition; always send structured fields (`schedule` + `payload` or `delaySeconds` + `message`).
+- Do not send raw natural-language text or code calls (e.g. `telegram_send_message(...)`) as the job definition; always send structured fields (`schedule` + `payload` or `delaySeconds` + `message`).
+- The `job` field is NOT a place for function calls or code strings — put the reminder text in `payload.message` or top-level `message`.
 - `delaySeconds` / `delayMs` are one-shot delays and should not be used for recurring jobs.
 - If cron returns a preflight validation error, immediately retry once with normalized args (`action="add"`, explicit `schedule`, explicit `payload.message`) and do not repeat identical invalid arguments.
 - After creating a job, report `id`, schedule, and expected next run time.

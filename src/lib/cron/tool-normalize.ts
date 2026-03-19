@@ -307,7 +307,8 @@ function normalizePayloadFromRecord(input: UnknownRecord): CronJobCreate["payloa
     readString(input.message) ??
     readString(input.prompt) ??
     readString(input.payloadMessage) ??
-    readString(input.text);
+    readString(input.text) ??
+    (typeof input.job === "string" ? readString(input.job) : undefined);
 
   if ((kind && kind !== "agentturn" && kind !== "agentTurn") || !message) {
     return null;
@@ -353,7 +354,8 @@ function explainAddInputFailure(source: UnknownRecord): string {
       Boolean(readString(payloadRecord?.text)) ||
       Boolean(readString(source.message)) ||
       Boolean(readString(source.payloadMessage)) ||
-      Boolean(readString(source.text));
+      Boolean(readString(source.text)) ||
+      (typeof source.job === "string" && Boolean(readString(source.job)));
     const rawKind = readString(payloadRecord?.kind);
 
     if (!hasMessage) {
