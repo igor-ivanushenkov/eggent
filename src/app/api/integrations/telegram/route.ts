@@ -845,7 +845,9 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      await sendTelegramMessage(botToken, chatId, result.reply, messageId);
+      if (result.reply && result.reply.trim()) {
+        await sendTelegramMessage(botToken, chatId, result.reply, messageId);
+      }
       return Response.json({ ok: true });
     } catch (error) {
       if (error instanceof ExternalMessageError) {

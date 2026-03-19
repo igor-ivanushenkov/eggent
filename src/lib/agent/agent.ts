@@ -707,6 +707,28 @@ function getLastResponseToolText(messages: ModelMessage[]): string {
   return "";
 }
 
+function extractToolSuccessFallback(messages: ModelMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    if (msg.role !== "tool" || !Array.isArray(msg.content)) continue;
+    for (let j = msg.content.length - 1; j >= 0; j -= 1) {
+      const part = msg.content[j];
+      if (typeof part !== "object" || !part) continue;
+      if (!("type" in part) || (part as { type: unknown }).type !== "tool-result") continue;
+      const output = ("output" in part ? (part as { output?: unknown }).output : (part as { result?: unknown }).result);
+      if (typeof output !== "string") continue;
+      try {
+        const json = JSON.parse(output);
+        if (json && typeof json === "object") {
+          if (json.id && json.schedule) return "✅ Напоминание установлено.";
+          if (json.success === true) return "✅ Готово.";
+        }
+      } catch { /* not JSON, skip */ }
+    }
+  }
+  return "";
+}
+
 function shouldAutoContinueAssistant(
   text: string,
   finishReason?: string
@@ -1021,7 +1043,11 @@ export async function runAgentText(options: {
       Array.isArray(responseMessages) && responseMessages.length > 0
         ? getLastResponseToolText(responseMessages) || getLastAssistantText(responseMessages)
         : "";
-    const finalText = text.trim() ? text : fallbackReply;
+    const toolFallback =
+      !text.trim() && !fallbackReply.trim() && Array.isArray(responseMessages)
+        ? extractToolSuccessFallback(responseMessages)
+        : "";
+    const finalText = text.trim() ? text : (fallbackReply.trim() || toolFallback);
 
     try {
       const latest = await getChat(options.chatId);
