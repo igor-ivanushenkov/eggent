@@ -91,6 +91,7 @@ export function createCronTool(context: AgentContext) {
           const addInput = normalizeCronToolAddInput(raw);
           if (!addInput) {
             const reason = explainCronToolAddInputFailure(raw);
+            console.warn("[cron-tool] preflight failed. raw input:", JSON.stringify(raw));
             return `[Preflight error] Invalid cron add payload. ${reason}`;
           }
           const telegramChatIdFromContext = readTelegramChatIdFromContext(context);
