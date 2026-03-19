@@ -299,7 +299,10 @@ function normalizePayloadFromRecord(input: UnknownRecord): CronJobCreate["payloa
   const payload = payloadRaw ? unwrapKnownWrappers(payloadRaw, ["data", "payload"]) : input;
 
   const rawKind = readString(payload.kind)?.toLowerCase();
-  const kind = rawKind === "agentturn" ? "agentTurn" : rawKind;
+  const kind =
+    rawKind === "agentturn" ? "agentTurn" :
+    rawKind === "directmessage" ? "directMessage" :
+    rawKind;
   const message =
     readString(payload.message) ??
     readString(payload.prompt) ??
@@ -310,8 +313,20 @@ function normalizePayloadFromRecord(input: UnknownRecord): CronJobCreate["payloa
     readString(input.text) ??
     (typeof input.job === "string" ? readString(input.job) : undefined);
 
-  if ((kind && kind !== "agentturn" && kind !== "agentTurn") || !message) {
+  if ((kind && kind !== "agentturn" && kind !== "agentTurn" && kind !== "directMessage") || !message) {
     return null;
+  }
+
+  if (kind === "directMessage") {
+    return {
+      kind: "directMessage",
+      message,
+      telegramChatId:
+        readString(payload.telegramChatId) ??
+        readString(payload.telegram_chat_id) ??
+        readString(input.telegramChatId) ??
+        readString(input.telegram_chat_id),
+    };
   }
 
   const timeoutSeconds = readNumber(payload.timeoutSeconds) ?? readNumber(input.timeoutSeconds);

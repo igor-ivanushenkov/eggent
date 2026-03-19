@@ -5,14 +5,20 @@ export type CronSchedule =
   | { kind: "every"; everyMs: number; anchorMs?: number }
   | { kind: "cron"; expr: string; tz?: string };
 
-export type CronPayload = {
-  kind: "agentTurn";
-  message: string;
-  chatId?: string;
-  telegramChatId?: string;
-  currentPath?: string;
-  timeoutSeconds?: number;
-};
+export type CronPayload =
+  | {
+      kind: "agentTurn";
+      message: string;
+      chatId?: string;
+      telegramChatId?: string;
+      currentPath?: string;
+      timeoutSeconds?: number;
+    }
+  | {
+      kind: "directMessage";
+      message: string;
+      telegramChatId?: string;
+    };
 
 export type CronRunStatus = "ok" | "error" | "skipped";
 

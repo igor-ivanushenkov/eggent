@@ -512,10 +512,28 @@ async function finalizeJobRun(projectIdRaw: string, jobId: string, result: RunRe
 
 async function executeCronJob(job: CronJob): Promise<RunResult> {
   const startedAt = Date.now();
+  if (job.payload.kind === "directMessage") {
+    const telegramChatId = normalizeTelegramChatId(job.payload.telegramChatId);
+    if (!telegramChatId) {
+      return { status: "error", error: "directMessage requires telegramChatId.", startedAt, endedAt: Date.now() };
+    }
+    const telegramRuntime = await getTelegramIntegrationRuntimeConfig();
+    const botToken = telegramRuntime.botToken.trim();
+    if (!botToken) {
+      return { status: "error", error: "Telegram bot token is not configured.", startedAt, endedAt: Date.now() };
+    }
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: telegramChatId, text: job.payload.message }),
+    });
+    return { status: "ok", summary: job.payload.message, startedAt, endedAt: Date.now() };
+  }
+
   if (job.payload.kind !== "agentTurn") {
     return {
       status: "skipped",
-      error: 'Only payload.kind="agentTurn" is supported.',
+      error: 'Only payload.kind="agentTurn" or "directMessage" is supported.',
       startedAt,
       endedAt: Date.now(),
     };
