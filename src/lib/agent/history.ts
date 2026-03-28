@@ -46,9 +46,16 @@ export class History {
       const nonSystemMessages = this.messages.filter(
         (m) => m.role !== "system"
       );
-      const trimmed = nonSystemMessages.slice(
+      let trimmed = nonSystemMessages.slice(
         nonSystemMessages.length - this.maxMessages + systemMessages.length
       );
+      // Ensure the history always starts with a user message so that
+      // models with strict turn-ordering Jinja templates (e.g. LM Studio)
+      // don't fail with "No user query found in messages".
+      const firstUserIdx = trimmed.findIndex((m) => m.role === "user");
+      if (firstUserIdx > 0) {
+        trimmed = trimmed.slice(firstUserIdx);
+      }
       this.messages = [...systemMessages, ...trimmed];
     }
   }
