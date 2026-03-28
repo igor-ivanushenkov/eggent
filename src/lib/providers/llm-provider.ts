@@ -1533,17 +1533,9 @@ function createReasoningAwareFetch(): typeof fetch {
                     (choice.delta.content === "" || choice.delta.content == null) &&
                     choice.delta.reasoning
                   ) {
-                    const hasToolCalls =
-                      Array.isArray(choice.delta.tool_calls) && choice.delta.tool_calls.length > 0;
-                    if (hasToolCalls) {
-                      // Suppress reasoning when tool_calls are present
-                      delete choice.delta.reasoning;
-                      if (choice.delta.content == null) choice.delta.content = "";
-                    } else {
-                      // No content AND no tool_calls — use reasoning as content fallback
-                      choice.delta.content = choice.delta.reasoning;
-                      delete choice.delta.reasoning;
-                    }
+                    // Suppress reasoning-only chunks; tool_calls pass through normally
+                    delete choice.delta.reasoning;
+                    if (choice.delta.content == null) choice.delta.content = "";
                   }
                 }
               }
