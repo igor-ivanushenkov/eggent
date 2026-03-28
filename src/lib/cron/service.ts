@@ -641,9 +641,14 @@ async function executeCronJob(job: CronJob): Promise<RunResult> {
   };
 
   try {
+    const cronContextPrefix =
+      `[CRON TASK] This is an automated cron job execution, NOT a user conversation.\n` +
+      `Job: "${job.name}"\n` +
+      `Your ONLY task: execute the instruction below and return the result. ` +
+      `Do NOT create new cron jobs, do NOT ask questions, do NOT add commentary.\n\n`;
     const runPromise = runAgentText({
       chatId,
-      userMessage: job.payload.message,
+      userMessage: cronContextPrefix + job.payload.message,
       projectId,
       currentPath: job.payload.currentPath,
       runtimeData:
