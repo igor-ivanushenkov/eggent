@@ -20,6 +20,7 @@ import { knowledgeQuery } from "@/lib/tools/knowledge-query";
 import { searchWeb } from "@/lib/tools/search-engine";
 import { callSubordinate } from "@/lib/tools/call-subordinate";
 import { createCronTool } from "@/lib/tools/cron-tool";
+import { createRemindTool } from "@/lib/tools/remind-tool";
 import { installPackages } from "@/lib/tools/install-orchestrator";
 import { loadPdf } from "@/lib/memory/loaders/pdf-loader";
 import {
@@ -1389,6 +1390,7 @@ export function createAgentTools(
   }
 
   tools.cron = createCronTool(context);
+  tools.remind = createRemindTool(context);
 
   // Load skill tool — load full instructions when model activates a project skill (Agent Skills integrate-skills)
   if (context.projectId) {
