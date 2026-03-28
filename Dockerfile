@@ -71,6 +71,7 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/next.config.mjs ./next.config.mjs
 COPY --from=builder /app/bundled-skills ./bundled-skills
+COPY --from=builder /app/src/prompts ./src/prompts
 COPY --from=builder /app/scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
 
 RUN mkdir -p /app/data/tmp /app/data/ms-playwright /app/data/npm-cache /app/data/.cache \
