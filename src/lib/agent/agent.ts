@@ -854,6 +854,7 @@ export async function runAgent(options: {
       const responseMessages = event.response.messages;
       const lastAssistantText = getLastAssistantText(responseMessages);
       let continuationText = "";
+      let fallbackText = "";
 
       if (shouldAutoContinueAssistant(lastAssistantText, finishReason)) {
         try {
@@ -878,6 +879,14 @@ export async function runAgent(options: {
         } catch (error) {
           console.warn("Auto-continuation failed:", error);
         }
+      }
+
+      // Compute fallback text if model returned nothing after tool calls
+      if (!lastAssistantText.trim() && !continuationText.trim()) {
+        fallbackText =
+          getLastResponseToolText(responseMessages) ||
+          getLastAssistantText(responseMessages) ||
+          extractToolSuccessFallback(responseMessages);
       }
 
       if (mcpCleanup) {
@@ -910,6 +919,14 @@ export async function runAgent(options: {
               id: crypto.randomUUID(),
               role: "assistant",
               content: continuationText,
+              createdAt: now,
+            });
+          }
+          if (!continuationText && fallbackText.trim()) {
+            chat.messages.push({
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: fallbackText.trim(),
               createdAt: now,
             });
           }
