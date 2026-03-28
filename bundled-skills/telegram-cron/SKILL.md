@@ -1,6 +1,6 @@
 ---
 name: telegram-cron
-description: "Create scheduled cron jobs that send Telegram messages. Use when: user asks to set up a reminder, scheduled notification, or recurring message via Telegram. NOT for: one-time messages, non-Telegram notifications."
+description: "Create scheduled cron jobs that send Telegram messages. Use when: user asks to set up a reminder (one-time or recurring), scheduled notification, or recurring message via Telegram. NOT for: immediate (non-scheduled) messages or non-Telegram channels."
 metadata: { "eggent": { "emoji": "⏰" } }
 ---
 

@@ -317,29 +317,43 @@ function normalizePayloadFromRecord(input: UnknownRecord): CronJobCreate["payloa
     return null;
   }
 
-  if (kind === "directMessage") {
+  const telegramChatId =
+    readString(payload.telegramChatId) ??
+    readString(payload.telegram_chat_id) ??
+    readString(input.telegramChatId) ??
+    readString(input.telegram_chat_id);
+
+  // Determine effective kind: if not explicitly set, default to "directMessage"
+  // when there are no agent-specific fields (currentPath, timeoutSeconds),
+  // because simple reminders should just send text directly.
+  const chatId = readString(payload.chatId) ?? readString(input.chatId);
+  const currentPath = readString(payload.currentPath) ?? readString(input.currentPath);
+  const timeoutSeconds = readNumber(payload.timeoutSeconds) ?? readNumber(input.timeoutSeconds);
+  const hasAgentFields = Boolean(currentPath || typeof timeoutSeconds === "number");
+
+  const effectiveKind: "agentTurn" | "directMessage" =
+    kind === "directMessage"
+      ? "directMessage"
+      : kind === "agentTurn"
+        ? "agentTurn"
+        : hasAgentFields
+          ? "agentTurn"
+          : "directMessage";
+
+  if (effectiveKind === "directMessage") {
     return {
       kind: "directMessage",
       message,
-      telegramChatId:
-        readString(payload.telegramChatId) ??
-        readString(payload.telegram_chat_id) ??
-        readString(input.telegramChatId) ??
-        readString(input.telegram_chat_id),
+      telegramChatId,
     };
   }
 
-  const timeoutSeconds = readNumber(payload.timeoutSeconds) ?? readNumber(input.timeoutSeconds);
   return {
     kind: "agentTurn",
     message,
-    chatId: readString(payload.chatId) ?? readString(input.chatId),
-    telegramChatId:
-      readString(payload.telegramChatId) ??
-      readString(payload.telegram_chat_id) ??
-      readString(input.telegramChatId) ??
-      readString(input.telegram_chat_id),
-    currentPath: readString(payload.currentPath) ?? readString(input.currentPath),
+    chatId,
+    telegramChatId,
+    currentPath,
     timeoutSeconds:
       typeof timeoutSeconds === "number" && Number.isFinite(timeoutSeconds)
         ? Math.max(0, Math.floor(timeoutSeconds))
@@ -376,7 +390,7 @@ function explainAddInputFailure(source: UnknownRecord): string {
     if (!hasMessage) {
       problems.push("Missing payload message. Provide `payload.message` (or top-level `message`).");
     } else if (rawKind && rawKind.toLowerCase() !== "agentturn") {
-      problems.push("Invalid payload kind. `payload.kind` must be `agentTurn`.");
+      problems.push("Invalid payload kind. `payload.kind` must be `agentTurn` or `directMessage`.");
     } else {
       problems.push("Invalid payload object. Expected `payload.kind=\"agentTurn\"` + `payload.message`.");
     }
@@ -456,14 +470,22 @@ export function normalizeCronToolPatchInput(
 
   const payload = normalizePayloadFromRecord(source);
   if (payload) {
-    patch.payload = {
-      kind: "agentTurn",
-      message: payload.message,
-      chatId: payload.chatId,
-      telegramChatId: payload.telegramChatId,
-      currentPath: payload.currentPath,
-      timeoutSeconds: payload.timeoutSeconds,
-    };
+    if (payload.kind === "directMessage") {
+      patch.payload = {
+        kind: "directMessage",
+        message: payload.message,
+        telegramChatId: payload.telegramChatId,
+      };
+    } else {
+      patch.payload = {
+        kind: "agentTurn",
+        message: payload.message,
+        chatId: payload.chatId,
+        telegramChatId: payload.telegramChatId,
+        currentPath: payload.currentPath,
+        timeoutSeconds: payload.timeoutSeconds,
+      };
+    }
   }
 
   return Object.keys(patch).length > 0 ? patch : null;
