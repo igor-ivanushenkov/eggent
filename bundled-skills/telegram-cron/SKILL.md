@@ -13,7 +13,7 @@ Create cron jobs that deliver scheduled messages to a Telegram chat.
 **All times are Moscow Time (MSK, UTC+3).** Always use `"Europe/Moscow"` as the timezone.
 
 - For `at` schedules: always include `+03:00` offset in the ISO string (e.g. `"2026-03-18T15:00:00+03:00"`).
-- For `cron` schedules: always set `"tz": "Europe/Moscow"` in the schedule object.
+- For `cron` schedules: always set `"tz": "Europe/Moscow"` in the schedule object. Cron expressions are then interpreted in MSK.
 - For `delaySeconds`: compute seconds from current MSK time to target MSK time — no offset needed.
 
 ## How It Works
@@ -22,15 +22,24 @@ When the user asks from **within a Telegram chat**, `telegramChatId` is injected
 
 When called from the **web UI**, you must include `payload.telegramChatId` explicitly (numeric Telegram chat ID).
 
+## Payload kind — which to choose
+
+| Situation | kind | Field |
+|---|---|---|
+| Simple reminder — just send text to the user | `directMessage` | `message` — the exact text to send |
+| Complex task — agent needs to do something (search, calculate, etc.) | `agentTurn` | `message` — instruction for the agent |
+
+**Use `directMessage` for almost all reminders.** The message is sent directly to Telegram without running the agent — no formatting, no extra text, exactly what the user asked.
+
+**Use `agentTurn` only** when the task requires the agent to do work at the time of the reminder (e.g. "check weather and remind me", "look up exchange rate and notify").
+
 ## One-Time vs Recurring — How to Choose
 
 - **No recurrence mentioned** ("напомни в 16:00", "remind me at 5pm") → one-time (`kind: "at"` or `delaySeconds`)
 - **Recurrence mentioned** ("каждый день", "every weekday", "ежедневно", "по утрам") → recurring (`kind: "cron"`)
 - **When unsure** — create one-time and ask the user if they want it repeated
 
-## One-Time Reminder vs Recurring — Pick One
-
-### One-time reminder (fires once at a specific MSK time)
+## One-time reminder (fires once at a specific MSK time)
 
 Use `schedule: { "kind": "at", "at": "<ISO with +03:00>" }` with the exact MSK datetime.
 
@@ -38,10 +47,11 @@ Use `schedule: { "kind": "at", "at": "<ISO with +03:00>" }` with the exact MSK d
 {
   "action": "add",
   "job": {
-    "name": "Reminder at 18:00 MSK",
+    "name": "Напоминание в 18:00",
     "schedule": { "kind": "at", "at": "2026-03-18T18:00:00+03:00" },
     "payload": {
-      "prompt": "Send the user a reminder: 'Time to submit the report!'"
+      "kind": "directMessage",
+      "message": "Пора сдать отчёт!"
     }
   }
 }
@@ -49,20 +59,19 @@ Use `schedule: { "kind": "at", "at": "<ISO with +03:00>" }` with the exact MSK d
 
 Alternatively, use `delaySeconds` — compute the number of seconds from now (current MSK time) until the target MSK time.
 
-> Example: if it is now 17:00 MSK and the user wants a reminder at 18:00 MSK, set `delaySeconds: 3600`.
+## Recurring reminder (fires on a cron schedule in MSK)
 
-### Recurring reminder (fires on a cron schedule in MSK)
-
-Use `schedule: { "kind": "cron", "expr": "<5-field cron>", "tz": "Europe/Moscow" }` — **`schedule` must be an object with `tz`, NOT a plain string**.
+Use `schedule: { "kind": "cron", "expr": "<5-field cron>", "tz": "Europe/Moscow" }`.
 
 ```json
 {
   "action": "add",
   "job": {
-    "name": "Daily standup reminder",
+    "name": "Ежедневный стендап",
     "schedule": { "kind": "cron", "expr": "0 9 * * 1-5", "tz": "Europe/Moscow" },
     "payload": {
-      "prompt": "Send the user a reminder: 'Time for standup!'"
+      "kind": "directMessage",
+      "message": "Время стендапа!"
     }
   }
 }
@@ -76,7 +85,7 @@ Use `schedule: { "kind": "cron", "expr": "<5-field cron>", "tz": "Europe/Moscow"
 
 ## Cron Expr Field Order
 
-`minute hour day-of-month month day-of-week` (all values in MSK)
+`minute hour day-of-month month day-of-week` (all values in MSK when `tz: "Europe/Moscow"` is set)
 
 | Example | Meaning |
 |---|---|
@@ -90,12 +99,12 @@ Use `schedule: { "kind": "cron", "expr": "<5-field cron>", "tz": "Europe/Moscow"
 ```json
 { "action": "list" }
 { "action": "remove", "jobId": "<id>" }
-{ "action": "update", "jobId": "<id>", "patch": { "schedule": { "kind": "cron", "expr": "0 10 * * *" } } }
+{ "action": "update", "jobId": "<id>", "patch": { "schedule": { "kind": "cron", "expr": "0 10 * * *", "tz": "Europe/Moscow" } } }
 { "action": "run", "jobId": "<id>" }
 ```
 
 ## Notes
 
-- `payload.prompt` is the instruction the agent executes at run time — the result is sent back to Telegram
 - The Telegram bot token must be configured in Settings → Integrations for delivery to work
-- All times in cron expressions are **UTC**
+- `directMessage` sends the text as-is — the agent is not involved at run time
+- `agentTurn` runs the agent at scheduled time; use only when real work is needed
