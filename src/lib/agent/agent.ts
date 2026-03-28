@@ -790,7 +790,7 @@ export async function runAgent(options: {
   if (chat) {
     // Convert stored messages to ModelMessage format (including tool calls/results)
     const allMessages = convertChatMessagesToModelMessages(chat.messages);
-    const history = new History(20);
+    const history = new History(15);
     history.addMany(allMessages);
     context.history = history.getAll();
   }
@@ -997,7 +997,7 @@ export async function runAgentText(options: {
   const chat = await getChat(options.chatId);
   if (chat) {
     const allMessages = convertChatMessagesToModelMessages(chat.messages);
-    const history = new History(20);
+    const history = new History(15);
     history.addMany(allMessages);
     context.history = history.getAll();
   }
